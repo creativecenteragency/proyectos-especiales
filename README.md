@@ -49,9 +49,19 @@ npm run dev       # servidor de desarrollo
 npm run build     # build de producción + type-check
 ```
 
+### 4. Deploy a GitHub Pages
+
+Repo: [creativecenteragency/proyectos-especiales](https://github.com/creativecenteragency/proyectos-especiales).
+Cada push a `main` dispara `.github/workflows/deploy.yml` (mismo patrón que el CRM): build con
+`VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` como secrets del repo, y publica `dist/` en GitHub
+Pages. URL por defecto: https://creativecenteragency.github.io/proyectos-especiales/
+
+Para usar un dominio propio en vez del de github.io: Settings → Pages → Custom domain en el repo, y en el
+DNS de ese dominio (por ejemplo en Ferozo) agregar un registro CNAME apuntando a
+`creativecenteragency.github.io`. GitHub emite el certificado HTTPS automáticamente, sin costo.
+
 ## Próximos pasos sugeridos
 
 - Ver el prototipo funcionando y decidir cuánta libertad de tablas hace falta (campos custom vs. tablas
   libres tipo Notion en blanco).
 - Sumar comentarios de tareas (tabla `comments` ya existe en el schema, falta la UI).
-- Deploy a GitHub Pages (mismo patrón que el CRM, ver su `.github/workflows/deploy.yml`).
