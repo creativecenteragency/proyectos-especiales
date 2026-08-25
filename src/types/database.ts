@@ -85,8 +85,15 @@ export interface Group {
 
 export type TaskStatus = 'preparacion' | 'planificado' | 'en_curso' | 'hecho' | 'bloqueado'
 
+export interface TaskDependency {
+  task_id: string
+  depends_on_task_id: string
+  created_at: string
+}
+
 export interface Task {
   id: string
+  display_id: number
   group_id: string
   parent_task_id: string | null
   axis_id: string | null

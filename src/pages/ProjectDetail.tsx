@@ -8,7 +8,7 @@ import BrandMark from '../components/BrandMark'
 import ClientLogoEditor from '../components/ClientLogoEditor'
 import ProjectMembersPanel from '../components/ProjectMembersPanel'
 import Dropdown, { DropdownItem, DropdownLink } from '../components/Dropdown'
-import type { Axis, AxisChangeLog, Client, Group, List, Project, Provider, Task, TaskStatus } from '../types/database'
+import type { Axis, AxisChangeLog, Client, Group, List, Project, Provider, Task, TaskDependency, TaskStatus } from '../types/database'
 
 type ProjectDetailData = {
   project: Project & { clients: Client | null }
@@ -16,6 +16,7 @@ type ProjectDetailData = {
   lists: List[]
   groups: Group[]
   tasks: Task[]
+  dependencies: TaskDependency[]
   role: 'team' | 'auditor' | null
   changeLog: AxisChangeLog[]
 }
@@ -68,12 +69,18 @@ export default function ProjectDetail() {
         ? await supabase.from('tasks').select('*').in('group_id', groupIds).order('sort_order')
         : { data: [] as Task[] }
 
+      const taskIds = (tasks ?? []).map((t) => t.id)
+      const { data: dependencies } = taskIds.length
+        ? await supabase.from('task_dependencies').select('*').in('task_id', taskIds)
+        : { data: [] as TaskDependency[] }
+
       return {
         project: project as Project & { clients: Client | null },
         axes: axes ?? [],
         lists: lists ?? [],
         groups: groups ?? [],
         tasks: (tasks ?? []) as Task[],
+        dependencies: (dependencies ?? []) as TaskDependency[],
         role: (roleRow?.role as 'team' | 'auditor' | undefined) ?? null,
         changeLog: (changeLog ?? []) as AxisChangeLog[],
       }
@@ -202,6 +209,23 @@ export default function ProjectDetail() {
     },
     onSuccess: invalidate,
     onError: (err: unknown) => alert(`No se pudo reordenar: ${err instanceof Error ? err.message : String(err)}`),
+  })
+
+  const addDependency = useMutation({
+    mutationFn: async ({ taskId, dependsOnId }: { taskId: string; dependsOnId: string }) => {
+      const { error } = await supabase.from('task_dependencies').insert({ task_id: taskId, depends_on_task_id: dependsOnId })
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+    onError: (err: unknown) => alert(`No se pudo vincular la tarea: ${err instanceof Error ? err.message : String(err)}`),
+  })
+
+  const removeDependency = useMutation({
+    mutationFn: async ({ taskId, dependsOnId }: { taskId: string; dependsOnId: string }) => {
+      const { error } = await supabase.from('task_dependencies').delete().eq('task_id', taskId).eq('depends_on_task_id', dependsOnId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
   })
 
   const saveAxisPlan = useMutation({
@@ -500,6 +524,8 @@ export default function ProjectDetail() {
                           task={task}
                           axes={axes}
                           providers={providers ?? []}
+                          allTasks={tasks}
+                          dependencies={data.dependencies}
                           currency={project.currency}
                           canEdit={canEdit}
                           isOpen={openTaskId === task.id}
@@ -509,6 +535,8 @@ export default function ProjectDetail() {
                             if (confirm(`¿Eliminar la tarea "${task.title}"?`)) deleteTask.mutate(task.id)
                           }}
                           onAddProvider={(input) => addProvider.mutateAsync(input)}
+                          onAddDependency={(dependsOnId) => addDependency.mutate({ taskId: task.id, dependsOnId })}
+                          onRemoveDependency={(dependsOnId) => removeDependency.mutate({ taskId: task.id, dependsOnId })}
                           draggable={canEdit}
                           isDragging={draggedTaskId === task.id}
                           onDragStart={() => setDraggedTaskId(task.id)}
@@ -1046,6 +1074,8 @@ function TaskRow({
   task,
   axes,
   providers,
+  allTasks,
+  dependencies,
   currency,
   canEdit,
   isOpen,
@@ -1053,6 +1083,8 @@ function TaskRow({
   onUpdate,
   onDelete,
   onAddProvider,
+  onAddDependency,
+  onRemoveDependency,
   draggable,
   isDragging,
   onDragStart,
@@ -1062,6 +1094,8 @@ function TaskRow({
   task: Task
   axes: Axis[]
   providers: Provider[]
+  allTasks: Task[]
+  dependencies: TaskDependency[]
   currency: string
   canEdit: boolean
   isOpen: boolean
@@ -1069,6 +1103,8 @@ function TaskRow({
   onUpdate: (patch: Partial<Task>) => void
   onDelete: () => void
   onAddProvider: (input: { name: string; cuit: string }) => Promise<Provider | undefined>
+  onAddDependency: (dependsOnId: string) => void
+  onRemoveDependency: (dependsOnId: string) => void
   draggable: boolean
   isDragging: boolean
   onDragStart: () => void
@@ -1076,6 +1112,9 @@ function TaskRow({
   onDropOn: () => void
 }) {
   const axis = axes.find((a) => a.id === task.axis_id)
+  const dependsOn = dependencies.filter((d) => d.task_id === task.id).map((d) => allTasks.find((t) => t.id === d.depends_on_task_id)).filter((t): t is Task => !!t)
+  const neededBy = dependencies.filter((d) => d.depends_on_task_id === task.id).map((d) => allTasks.find((t) => t.id === d.task_id)).filter((t): t is Task => !!t)
+  const [dependencyPick, setDependencyPick] = useState('')
   const [titleEditing, setTitleEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [newProviderName, setNewProviderName] = useState('')
@@ -1139,7 +1178,8 @@ function TaskRow({
         {draggable && (
           <span title="Arrastrar para reordenar" className="cursor-grab text-brand-gray/50 select-none">⠿</span>
         )}
-        <button onClick={onToggle} className="flex-1 text-left">
+        <button onClick={onToggle} className="flex-1 text-left flex items-center gap-2">
+          <span className="text-[10px] font-mono text-brand-gray/70 flex-shrink-0">#{task.display_id}</span>
           {titleEditing ? (
             <input
               autoFocus
@@ -1297,6 +1337,59 @@ function TaskRow({
                   className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                 />
                 <p className="text-[10px] text-brand-gray mt-0.5">Se usa en "Marca en Acción" para mostrar qué acción del plan impulsó cada resultado.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4 pt-3 border-t border-brand-line">
+            <div>
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Depende de</h4>
+              <p className="text-[10px] text-brand-gray mb-1">Solo informativo — no bloquea nada, es para entender el orden entre tareas.</p>
+              <div className="flex flex-wrap gap-1 mb-1">
+                {dependsOn.map((t) => (
+                  <span key={t.id} className="inline-flex items-center gap-1 text-xs bg-brand-cream rounded-full px-2 py-1">
+                    #{t.display_id} {t.title}
+                    {canEdit && (
+                      <button onClick={() => onRemoveDependency(t.id)} className="text-brand-gray hover:text-brand-red">×</button>
+                    )}
+                  </span>
+                ))}
+                {dependsOn.length === 0 && <span className="text-xs text-brand-gray">Ninguna.</span>}
+              </div>
+              {canEdit && (
+                <div className="flex items-center gap-1">
+                  <select
+                    value={dependencyPick}
+                    onChange={(e) => setDependencyPick(e.target.value)}
+                    className="flex-1 text-xs px-2 py-1 rounded-md border border-brand-line"
+                  >
+                    <option value="">Elegir tarea…</option>
+                    {allTasks
+                      .filter((t) => t.id !== task.id && !dependsOn.some((d) => d.id === t.id))
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>#{t.display_id} · {t.title}</option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={() => {
+                      if (!dependencyPick) return
+                      onAddDependency(dependencyPick)
+                      setDependencyPick('')
+                    }}
+                    className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </div>
+            <div>
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">La necesitan</h4>
+              <div className="flex flex-wrap gap-1">
+                {neededBy.map((t) => (
+                  <span key={t.id} className="text-xs bg-brand-cream rounded-full px-2 py-1">#{t.display_id} {t.title}</span>
+                ))}
+                {neededBy.length === 0 && <span className="text-xs text-brand-gray">Ninguna.</span>}
               </div>
             </div>
           </div>
