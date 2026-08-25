@@ -29,6 +29,7 @@ export default function ProjectDetail() {
   const [showAxisEditor, setShowAxisEditor] = useState(false)
   const [showLogoEditor, setShowLogoEditor] = useState(false)
   const [showMembers, setShowMembers] = useState(false)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['project-detail', slug],
@@ -172,6 +173,7 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
+    onError: (err: unknown) => alert(`No se pudo crear la tarea: ${err instanceof Error ? err.message : String(err)}`),
   })
 
   const updateTask = useMutation({
@@ -180,6 +182,7 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
+    onError: (err: unknown) => alert(`No se pudo guardar el cambio: ${err instanceof Error ? err.message : String(err)}`),
   })
 
   const deleteTask = useMutation({
@@ -188,6 +191,17 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
+    onError: (err: unknown) => alert(`No se pudo eliminar la tarea: ${err instanceof Error ? err.message : String(err)}`),
+  })
+
+  const reorderTasks = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      await Promise.all(
+        orderedIds.map((id, index) => supabase.from('tasks').update({ sort_order: index + 1 }).eq('id', id)),
+      )
+    },
+    onSuccess: invalidate,
+    onError: (err: unknown) => alert(`No se pudo reordenar: ${err instanceof Error ? err.message : String(err)}`),
   })
 
   const saveAxisPlan = useMutation({
@@ -495,6 +509,20 @@ export default function ProjectDetail() {
                             if (confirm(`¿Eliminar la tarea "${task.title}"?`)) deleteTask.mutate(task.id)
                           }}
                           onAddProvider={(input) => addProvider.mutateAsync(input)}
+                          draggable={canEdit}
+                          isDragging={draggedTaskId === task.id}
+                          onDragStart={() => setDraggedTaskId(task.id)}
+                          onDragEnd={() => setDraggedTaskId(null)}
+                          onDropOn={() => {
+                            if (!draggedTaskId || draggedTaskId === task.id) return
+                            const order = groupTasks.map((t) => t.id)
+                            const fromIdx = order.indexOf(draggedTaskId)
+                            const toIdx = order.indexOf(task.id)
+                            if (fromIdx === -1 || toIdx === -1) return
+                            order.splice(toIdx, 0, order.splice(fromIdx, 1)[0])
+                            reorderTasks.mutate(order)
+                            setDraggedTaskId(null)
+                          }}
                         />
                       ))}
                       {groupTasks.length === 0 && (
@@ -992,6 +1020,28 @@ function AxisEditor({
   )
 }
 
+type TaskDraft = {
+  axisId: string
+  planned: string
+  actual: string
+  providerId: string
+  campaignRef: string
+  subtasksText: string
+  deliverable: string
+}
+
+function draftFromTask(task: Task): TaskDraft {
+  return {
+    axisId: task.axis_id ?? '',
+    planned: String(task.planned_amount),
+    actual: String(task.actual_amount),
+    providerId: task.provider_id ?? '',
+    campaignRef: task.campaign_ref ?? '',
+    subtasksText: ((task.custom_fields?.subtasks as string[] | undefined) ?? []).join('\n'),
+    deliverable: (task.custom_fields?.deliverable as string | undefined) ?? '',
+  }
+}
+
 function TaskRow({
   task,
   axes,
@@ -1003,6 +1053,11 @@ function TaskRow({
   onUpdate,
   onDelete,
   onAddProvider,
+  draggable,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+  onDropOn,
 }: {
   task: Task
   axes: Axis[]
@@ -1014,20 +1069,76 @@ function TaskRow({
   onUpdate: (patch: Partial<Task>) => void
   onDelete: () => void
   onAddProvider: (input: { name: string; cuit: string }) => Promise<Provider | undefined>
+  draggable: boolean
+  isDragging: boolean
+  onDragStart: () => void
+  onDragEnd: () => void
+  onDropOn: () => void
 }) {
   const axis = axes.find((a) => a.id === task.axis_id)
-  const [actual, setActual] = useState(String(task.actual_amount))
-  const [planned, setPlanned] = useState(String(task.planned_amount))
   const [titleEditing, setTitleEditing] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [newProviderName, setNewProviderName] = useState('')
   const [newProviderCuit, setNewProviderCuit] = useState('')
-  const subtasks = (task.custom_fields?.subtasks as string[] | undefined) ?? []
-  const deliverable = (task.custom_fields?.deliverable as string | undefined) ?? ''
+  const [draft, setDraft] = useState<TaskDraft>(() => draftFromTask(task))
+  const [dragOver, setDragOver] = useState(false)
+
+  // Vuelve a sincronizar el borrador con el servidor cuando la tarea cambia por fuera
+  // (guardado exitoso, u otro cambio remoto) — evita pisar ediciones a medio hacer sin motivo.
+  const [syncedAt, setSyncedAt] = useState(task.updated_at)
+  if (task.updated_at !== syncedAt) {
+    setSyncedAt(task.updated_at)
+    setDraft(draftFromTask(task))
+  }
+
+  const original = draftFromTask(task)
+  const dirty =
+    draft.axisId !== original.axisId ||
+    draft.planned !== original.planned ||
+    draft.actual !== original.actual ||
+    draft.providerId !== original.providerId ||
+    draft.campaignRef !== original.campaignRef ||
+    draft.subtasksText !== original.subtasksText ||
+    draft.deliverable !== original.deliverable
+
+  function saveDraft() {
+    onUpdate({
+      axis_id: draft.axisId || null,
+      planned_amount: Number(draft.planned) || 0,
+      actual_amount: Number(draft.actual) || 0,
+      provider_id: draft.providerId || null,
+      campaign_ref: draft.campaignRef.trim() || null,
+      custom_fields: {
+        ...task.custom_fields,
+        subtasks: draft.subtasksText.split('\n').map((s) => s.trim()).filter(Boolean),
+        deliverable: draft.deliverable,
+      },
+    })
+  }
 
   return (
-    <div>
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => {
+        if (!draggable) return
+        e.preventDefault()
+        if (!dragOver) setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        if (!draggable) return
+        e.preventDefault()
+        setDragOver(false)
+        onDropOn()
+      }}
+      className={`${isDragging ? 'opacity-40' : ''} ${dragOver ? 'border-t-2 border-brand-orange' : ''}`}
+    >
       <div className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-brand-cream/60">
+        {draggable && (
+          <span title="Arrastrar para reordenar" className="cursor-grab text-brand-gray/50 select-none">⠿</span>
+        )}
         <button onClick={onToggle} className="flex-1 text-left">
           {titleEditing ? (
             <input
@@ -1077,108 +1188,135 @@ function TaskRow({
       </div>
 
       {isOpen && (
-        <div className="px-5 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-          <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Subtareas</h4>
-            <textarea
-              defaultValue={subtasks.join('\n')}
-              disabled={!canEdit}
-              onBlur={(e) =>
-                onUpdate({
-                  custom_fields: { ...task.custom_fields, subtasks: e.target.value.split('\n').filter(Boolean) },
-                })
-              }
-              placeholder="Una subtarea por línea…"
-              className="w-full text-sm rounded-md border border-brand-line p-2 min-h-[80px] disabled:bg-brand-cream/50"
-            />
-          </div>
-          <div className="space-y-3">
+        <div className="px-5 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Entregable</h4>
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Subtareas</h4>
               <textarea
-                defaultValue={deliverable}
+                value={draft.subtasksText}
                 disabled={!canEdit}
-                onBlur={(e) => onUpdate({ custom_fields: { ...task.custom_fields, deliverable: e.target.value } })}
-                className="w-full text-sm rounded-md border-l-4 border-brand-orange bg-brand-cream p-2 min-h-[50px] disabled:opacity-70"
+                onChange={(e) => setDraft((d) => ({ ...d, subtasksText: e.target.value }))}
+                placeholder="Una subtarea por línea…"
+                className="w-full text-sm rounded-md border border-brand-line p-2 min-h-[80px] disabled:bg-brand-cream/50"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
-                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Proyectado</h4>
-                <input
-                  type="number"
-                  value={planned}
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Entregable</h4>
+                <textarea
+                  value={draft.deliverable}
                   disabled={!canEdit}
-                  onChange={(e) => setPlanned(e.target.value)}
-                  onBlur={() => onUpdate({ planned_amount: Number(planned) || 0 })}
-                  className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
+                  onChange={(e) => setDraft((d) => ({ ...d, deliverable: e.target.value }))}
+                  className="w-full text-sm rounded-md border-l-4 border-brand-orange bg-brand-cream p-2 min-h-[50px] disabled:opacity-70"
                 />
               </div>
               <div>
-                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Ejecutado (real)</h4>
-                <input
-                  type="number"
-                  value={actual}
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Eje</h4>
+                <select
+                  value={draft.axisId}
                   disabled={!canEdit}
-                  onChange={(e) => setActual(e.target.value)}
-                  onBlur={() => onUpdate({ actual_amount: Number(actual) || 0 })}
+                  onChange={(e) => setDraft((d) => ({ ...d, axisId: e.target.value }))}
+                  className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
+                >
+                  <option value="">Sin eje</option>
+                  {axes.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Proyectado</h4>
+                  <input
+                    type="number"
+                    value={draft.planned}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft((d) => ({ ...d, planned: e.target.value }))}
+                    className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
+                  />
+                </div>
+                <div>
+                  <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Ejecutado (real)</h4>
+                  <input
+                    type="number"
+                    value={draft.actual}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft((d) => ({ ...d, actual: e.target.value }))}
+                    className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
+                  />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Proveedor / cobra</h4>
+                <select
+                  value={draft.providerId}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft((d) => ({ ...d, providerId: e.target.value }))}
+                  className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
+                >
+                  <option value="">Sin asignar</option>
+                  {providers.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.cuit ? ` · ${p.cuit}` : ''}</option>
+                  ))}
+                </select>
+                {canEdit && (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      if (!newProviderName.trim()) return
+                      const created = await onAddProvider({ name: newProviderName.trim(), cuit: newProviderCuit.trim() })
+                      if (created) setDraft((d) => ({ ...d, providerId: created.id }))
+                      setNewProviderName('')
+                      setNewProviderCuit('')
+                    }}
+                    className="flex items-center gap-1 mt-1"
+                  >
+                    <input
+                      value={newProviderName}
+                      onChange={(e) => setNewProviderName(e.target.value)}
+                      placeholder="Proveedor nuevo…"
+                      className="flex-1 text-xs px-2 py-1 rounded-md border border-brand-line"
+                    />
+                    <input
+                      value={newProviderCuit}
+                      onChange={(e) => setNewProviderCuit(e.target.value)}
+                      placeholder="CUIT"
+                      className="w-24 text-xs px-2 py-1 rounded-md border border-brand-line"
+                    />
+                    <button type="submit" className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white">+</button>
+                  </form>
+                )}
+              </div>
+              <div>
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Campaña / posteo vinculado</h4>
+                <input
+                  value={draft.campaignRef}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft((d) => ({ ...d, campaignRef: e.target.value }))}
+                  placeholder="Ej: campaña de Meta o link del posteo que potenció esto…"
                   className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                 />
+                <p className="text-[10px] text-brand-gray mt-0.5">Se usa en "Marca en Acción" para mostrar qué acción del plan impulsó cada resultado.</p>
               </div>
             </div>
-            <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Proveedor / cobra</h4>
-              <select
-                value={task.provider_id ?? ''}
-                disabled={!canEdit}
-                onChange={(e) => onUpdate({ provider_id: e.target.value || null })}
-                className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
+          </div>
+
+          {canEdit && (
+            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-brand-line">
+              <button
+                onClick={saveDraft}
+                disabled={!dirty}
+                className="text-sm font-semibold px-4 py-1.5 rounded-md bg-brand-orange text-white disabled:opacity-40"
               >
-                <option value="">Sin asignar</option>
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}{p.cuit ? ` · ${p.cuit}` : ''}</option>
-                ))}
-              </select>
-              {canEdit && (
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault()
-                    if (!newProviderName.trim()) return
-                    const created = await onAddProvider({ name: newProviderName.trim(), cuit: newProviderCuit.trim() })
-                    if (created) onUpdate({ provider_id: created.id })
-                    setNewProviderName('')
-                    setNewProviderCuit('')
-                  }}
-                  className="flex items-center gap-1 mt-1"
-                >
-                  <input
-                    value={newProviderName}
-                    onChange={(e) => setNewProviderName(e.target.value)}
-                    placeholder="Proveedor nuevo…"
-                    className="flex-1 text-xs px-2 py-1 rounded-md border border-brand-line"
-                  />
-                  <input
-                    value={newProviderCuit}
-                    onChange={(e) => setNewProviderCuit(e.target.value)}
-                    placeholder="CUIT"
-                    className="w-24 text-xs px-2 py-1 rounded-md border border-brand-line"
-                  />
-                  <button type="submit" className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white">+</button>
-                </form>
+                Guardar cambios
+              </button>
+              {dirty ? (
+                <span className="text-xs text-brand-gray">Tenés cambios sin guardar.</span>
+              ) : (
+                <span className="text-xs text-brand-green">Todo guardado.</span>
               )}
             </div>
-            <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Campaña / posteo vinculado</h4>
-              <input
-                defaultValue={task.campaign_ref ?? ''}
-                disabled={!canEdit}
-                onBlur={(e) => onUpdate({ campaign_ref: e.target.value.trim() || null })}
-                placeholder="Ej: campaña de Meta o link del posteo que potenció esto…"
-                className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
-              />
-              <p className="text-[10px] text-brand-gray mt-0.5">Se usa en "Marca en Acción" para mostrar qué acción del plan impulsó cada resultado.</p>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
