@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
-import type { Provider, Task } from '../types/database'
+import type { Project, Provider, ProviderProject, Task } from '../types/database'
 
 const money = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
@@ -33,6 +33,37 @@ export default function ProvidersPage() {
       return (data ?? []) as Pick<Task, 'id' | 'provider_id' | 'actual_amount'>[]
     },
     enabled: !!profile?.is_master,
+  })
+
+  const { data: projects } = useQuery({
+    queryKey: ['all-projects-brief'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('projects').select('id, name, slug').order('name')
+      if (error) throw error
+      return (data ?? []) as Pick<Project, 'id' | 'name' | 'slug'>[]
+    },
+  })
+
+  const { data: providerProjects } = useQuery({
+    queryKey: ['provider-projects'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('provider_projects').select('provider_id, project_id')
+      if (error) throw error
+      return (data ?? []) as ProviderProject[]
+    },
+  })
+
+  const toggleProviderProject = useMutation({
+    mutationFn: async ({ providerId, projectId, checked }: { providerId: string; projectId: string; checked: boolean }) => {
+      if (checked) {
+        const { error } = await supabase.from('provider_projects').insert({ provider_id: providerId, project_id: projectId })
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('provider_projects').delete().eq('provider_id', providerId).eq('project_id', projectId)
+        if (error) throw error
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['provider-projects'] }),
   })
 
   const addProvider = useMutation({
@@ -85,6 +116,7 @@ export default function ProvidersPage() {
               <tr className="bg-brand-carbon text-white text-left">
                 <th className="px-4 py-2 font-semibold">Proveedor</th>
                 <th className="px-4 py-2 font-semibold">CUIT</th>
+                <th className="px-4 py-2 font-semibold">Proyectos</th>
                 <th className="px-4 py-2 font-semibold text-right">Invertido</th>
                 <th className="px-4 py-2 font-semibold text-right">% del total</th>
                 <th className="px-4 py-2"></th>
@@ -102,6 +134,15 @@ export default function ProvidersPage() {
                   <tr key={p.id}>
                     <td className="px-4 py-2 text-brand-carbon font-medium">{p.name}</td>
                     <td className="px-4 py-2 text-brand-gray">{p.cuit ?? '—'}</td>
+                    <td className="px-4 py-2">
+                      <ProviderProjectsPicker
+                        projects={projects ?? []}
+                        assignedProjectIds={new Set(
+                          (providerProjects ?? []).filter((pp) => pp.provider_id === p.id).map((pp) => pp.project_id),
+                        )}
+                        onToggle={(projectId, checked) => toggleProviderProject.mutate({ providerId: p.id, projectId, checked })}
+                      />
+                    </td>
                     <td className="px-4 py-2 text-right text-brand-carbon">{money(invested)}</td>
                     <td className="px-4 py-2 text-right text-brand-gray">{pct.toFixed(1)}%</td>
                     <td className="px-4 py-2 text-right">
@@ -118,7 +159,7 @@ export default function ProvidersPage() {
                 ))}
               {(providers ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-brand-gray">Todavía no hay proveedores cargados.</td>
+                  <td colSpan={6} className="px-4 py-6 text-center text-brand-gray">Todavía no hay proveedores cargados.</td>
                 </tr>
               )}
             </tbody>
@@ -149,6 +190,67 @@ export default function ProvidersPage() {
           </button>
         </form>
       </main>
+    </div>
+  )
+}
+
+function ProviderProjectsPicker({
+  projects,
+  assignedProjectIds,
+  onToggle,
+}: {
+  projects: Pick<Project, 'id' | 'name' | 'slug'>[]
+  assignedProjectIds: Set<string>
+  onToggle: (projectId: string, checked: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const assigned = projects.filter((pr) => assignedProjectIds.has(pr.id))
+
+  useEffect(() => {
+    if (!open) return
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex flex-wrap items-center gap-1 max-w-[220px] text-left"
+      >
+        {assigned.length === 0 && <span className="text-xs text-brand-gray hover:text-brand-carbon">Sin asignar</span>}
+        {assigned.map((pr) => (
+          <span
+            key={pr.id}
+            className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-brand-cream text-brand-gray"
+          >
+            {pr.name}
+          </span>
+        ))}
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1 left-0 bg-white border border-brand-line rounded-lg shadow-lg py-1.5 min-w-[220px] max-h-64 overflow-y-auto z-20">
+          {projects.length === 0 && <p className="px-3 py-2 text-xs text-brand-gray">No hay proyectos creados.</p>}
+          {projects.map((pr) => (
+            <label
+              key={pr.id}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-brand-carbon hover:bg-brand-cream cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={assignedProjectIds.has(pr.id)}
+                onChange={(e) => onToggle(pr.id, e.target.checked)}
+              />
+              {pr.name}
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

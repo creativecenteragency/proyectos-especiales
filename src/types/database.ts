@@ -120,6 +120,12 @@ export interface Provider {
   created_at: string
 }
 
+export interface ProviderProject {
+  provider_id: string
+  project_id: string
+  created_at: string
+}
+
 export type Aggregator = 'windsor' | 'mastermetrics' | 'metricool'
 
 export interface ApiCredential {
@@ -186,6 +192,7 @@ export interface Database {
       tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task> }
       comments: { Row: Comment; Insert: Partial<Comment>; Update: Partial<Comment> }
       providers: { Row: Provider; Insert: Partial<Provider>; Update: Partial<Provider> }
+      provider_projects: { Row: ProviderProject; Insert: Partial<ProviderProject>; Update: Partial<ProviderProject> }
       axis_change_log: { Row: AxisChangeLog; Insert: Partial<AxisChangeLog>; Update: Partial<AxisChangeLog> }
     }
     Views: {
