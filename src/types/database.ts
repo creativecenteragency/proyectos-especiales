@@ -32,6 +32,19 @@ export interface Project {
   start_date: string | null
   end_date: string | null
   status: ProjectStatus
+  proposal_summary: string | null
+  proposal_objectives: string | null
+  created_at: string
+}
+
+export interface RoadmapItem {
+  id: string
+  project_id: string
+  quarter_label: string
+  title: string
+  period_label: string | null
+  bullets: string[]
+  sort_order: number
   created_at: string
 }
 

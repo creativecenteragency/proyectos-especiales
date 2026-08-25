@@ -8,6 +8,7 @@ import ProvidersPage from './pages/ProvidersPage'
 import ReportPrint from './pages/ReportPrint'
 import MarcaEnAccion from './pages/MarcaEnAccion'
 import Conexiones from './pages/Conexiones'
+import ProjectProposal from './pages/ProjectProposal'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, loading, passwordRecovery } = useAuth()
@@ -45,6 +46,14 @@ export default function App() {
         element={
           <RequireAuth>
             <ReportPrint />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/proyecto/:slug/propuesta"
+        element={
+          <RequireAuth>
+            <ProjectProposal />
           </RequireAuth>
         }
       />

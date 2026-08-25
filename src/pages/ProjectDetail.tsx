@@ -326,6 +326,9 @@ export default function ProjectDetail() {
                   )}
                 </Dropdown>
               )}
+              <Link to={`/proyecto/${project.slug}/propuesta`} className="text-xs text-white/60 hover:text-white">
+                Propuesta original
+              </Link>
               <Link to={`/proyecto/${project.slug}/informe`} className="text-xs text-white/60 hover:text-white">
                 Informe imprimible →
               </Link>
