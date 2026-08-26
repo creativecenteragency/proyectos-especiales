@@ -210,7 +210,7 @@ export default function ProjectDetail() {
 
   const commitBoard = useMutation({
     mutationFn: async () => {
-      const ops: Promise<{ error: { message: string } | null }>[] = []
+      const ops: PromiseLike<{ error: { message: string } | null }>[] = []
 
       if (boardDraft) {
         for (const [groupId, ids] of Object.entries(boardDraft)) {
