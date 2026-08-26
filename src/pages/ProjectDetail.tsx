@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
@@ -21,6 +21,11 @@ type ProjectDetailData = {
   changeLog: AxisChangeLog[]
 }
 
+// Tablero de tareas en edición: mientras haya arrastres o duplicados pendientes, nada se
+// escribe en la base — solo se aplica al confirmar con "Guardar cambios".
+type BoardDraft = Record<string, string[]> // group_id -> ids ordenados ("new:<uuid>" = duplicado sin guardar)
+type PendingDuplicate = { source: Task; targetGroupId: string }
+
 export default function ProjectDetail() {
   const { slug } = useParams<{ slug: string }>()
   const { profile, session } = useAuth()
@@ -31,6 +36,8 @@ export default function ProjectDetail() {
   const [showLogoEditor, setShowLogoEditor] = useState(false)
   const [showMembers, setShowMembers] = useState(false)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [boardDraft, setBoardDraft] = useState<BoardDraft | null>(null)
+  const [pendingDuplicates, setPendingDuplicates] = useState<Record<string, PendingDuplicate>>({})
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['project-detail', slug],
@@ -201,14 +208,63 @@ export default function ProjectDetail() {
     onError: (err: unknown) => alert(`No se pudo eliminar la tarea: ${err instanceof Error ? err.message : String(err)}`),
   })
 
-  const reorderTasks = useMutation({
-    mutationFn: async (orderedIds: string[]) => {
-      await Promise.all(
-        orderedIds.map((id, index) => supabase.from('tasks').update({ sort_order: index + 1 }).eq('id', id)),
-      )
+  const commitBoard = useMutation({
+    mutationFn: async () => {
+      const ops: Promise<{ error: { message: string } | null }>[] = []
+
+      if (boardDraft) {
+        for (const [groupId, ids] of Object.entries(boardDraft)) {
+          ids.forEach((id, index) => {
+            if (id.startsWith('new:')) return
+            const sortOrder = index + 1
+            const original = data?.tasks.find((t) => t.id === id)
+            if (!original) return
+            if (original.group_id !== groupId || original.sort_order !== sortOrder) {
+              ops.push(supabase.from('tasks').update({ group_id: groupId, sort_order: sortOrder }).eq('id', id))
+            }
+          })
+        }
+      }
+
+      const dupEntries = Object.entries(pendingDuplicates)
+      for (const [tempId, { source, targetGroupId }] of dupEntries) {
+        let sortOrder: number
+        if (boardDraft?.[targetGroupId]) {
+          sortOrder = boardDraft[targetGroupId].indexOf(tempId) + 1
+        } else {
+          const existingCount = data?.tasks.filter((t) => t.group_id === targetGroupId).length ?? 0
+          const priorInGroup = dupEntries.filter(([id, d]) => d.targetGroupId === targetGroupId && id < tempId).length
+          sortOrder = existingCount + priorInGroup + 1
+        }
+        ops.push(
+          supabase.from('tasks').insert({
+            group_id: targetGroupId,
+            axis_id: source.axis_id,
+            provider_id: source.provider_id,
+            campaign_ref: source.campaign_ref,
+            title: `${source.title} (copia)`,
+            description: source.description,
+            status: 'preparacion',
+            tags: source.tags,
+            custom_fields: source.custom_fields,
+            planned_amount: source.planned_amount,
+            actual_amount: 0,
+            due_date: source.due_date,
+            sort_order: sortOrder,
+          }),
+        )
+      }
+
+      const results = await Promise.all(ops)
+      const failed = results.find((r) => r.error)
+      if (failed?.error) throw new Error(failed.error.message)
     },
-    onSuccess: invalidate,
-    onError: (err: unknown) => alert(`No se pudo reordenar: ${err instanceof Error ? err.message : String(err)}`),
+    onSuccess: () => {
+      setBoardDraft(null)
+      setPendingDuplicates({})
+      invalidate()
+    },
+    onError: (err: unknown) => alert(`No se pudieron guardar los cambios: ${err instanceof Error ? err.message : String(err)}`),
   })
 
   const addDependency = useMutation({
@@ -340,6 +396,68 @@ export default function ProjectDetail() {
   const balance = Number(project.total_budget) - actualTotal
   const overBudget = projectedTotal > Number(project.total_budget)
   const brandColor = project.clients?.brand_color ?? '#f47a20'
+
+  function cloneBoardDraft(draft: BoardDraft): BoardDraft {
+    return Object.fromEntries(Object.entries(draft).map(([k, v]) => [k, [...v]]))
+  }
+
+  function boardDraftFromServer(): BoardDraft {
+    const draft: BoardDraft = {}
+    for (const g of groupsOfList) {
+      draft[g.id] = tasks
+        .filter((t) => t.group_id === g.id)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((t) => t.id)
+    }
+    return draft
+  }
+
+  function moveTaskInBoard(taskId: string, toGroupId: string, toIndex: number) {
+    setBoardDraft((prev) => {
+      const draft = prev ? cloneBoardDraft(prev) : boardDraftFromServer()
+      for (const gid of Object.keys(draft)) draft[gid] = draft[gid].filter((id) => id !== taskId)
+      if (!draft[toGroupId]) draft[toGroupId] = []
+      const clamped = Math.max(0, Math.min(toIndex, draft[toGroupId].length))
+      draft[toGroupId].splice(clamped, 0, taskId)
+      return draft
+    })
+  }
+
+  function duplicateTaskTo(source: Task, targetGroupId: string) {
+    const tempId = `new:${crypto.randomUUID()}`
+    setPendingDuplicates((prev) => ({ ...prev, [tempId]: { source, targetGroupId } }))
+    if (groupsOfList.some((g) => g.id === targetGroupId)) {
+      setBoardDraft((prev) => {
+        const draft = prev ? cloneBoardDraft(prev) : boardDraftFromServer()
+        draft[targetGroupId] = [...(draft[targetGroupId] ?? []), tempId]
+        return draft
+      })
+    }
+  }
+
+  function removePendingDuplicate(tempId: string) {
+    setPendingDuplicates((prev) => {
+      const next = { ...prev }
+      delete next[tempId]
+      return next
+    })
+    setBoardDraft((prev) => {
+      if (!prev) return prev
+      const draft = cloneBoardDraft(prev)
+      for (const gid of Object.keys(draft)) draft[gid] = draft[gid].filter((id) => id !== tempId)
+      return draft
+    })
+  }
+
+  function discardBoard() {
+    setBoardDraft(null)
+    setPendingDuplicates({})
+  }
+
+  const boardDirty = boardDraft !== null || Object.keys(pendingDuplicates).length > 0
+  const crossListDuplicates = Object.entries(pendingDuplicates).filter(
+    ([, pd]) => !groupsOfList.some((g) => g.id === pd.targetGroupId),
+  )
 
   return (
     <div className="min-h-screen bg-brand-cream">
@@ -498,14 +616,79 @@ export default function ProjectDetail() {
             {canEdit && <AddInline placeholder="Nueva lista…" onSubmit={(name) => addList.mutate(name)} />}
           </div>
 
+          {boardDirty && (
+            <div className="sticky top-2 z-30 mb-4 bg-brand-carbon text-white rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow">
+              <div className="text-sm">
+                <span className="font-semibold">Tenés cambios sin guardar</span>
+                <span className="text-white/70"> — los movimientos y duplicados no se aplican hasta que guardes.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={discardBoard}
+                  disabled={commitBoard.isPending}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                >
+                  Descartar
+                </button>
+                <button
+                  onClick={() => commitBoard.mutate()}
+                  disabled={commitBoard.isPending}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white disabled:opacity-50"
+                >
+                  {commitBoard.isPending ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {crossListDuplicates.length > 0 && (
+            <div className="mb-4 space-y-1">
+              {crossListDuplicates.map(([tempId, pd]) => {
+                const targetGroup = data.groups.find((g) => g.id === pd.targetGroupId)
+                const targetList = data.lists.find((l) => l.id === targetGroup?.list_id)
+                return (
+                  <div key={tempId} className="text-xs bg-white border border-brand-line rounded-md px-3 py-2 flex items-center justify-between">
+                    <span>
+                      Copia de "{pd.source.title}" → {targetList?.name} / {targetGroup?.name}
+                    </span>
+                    <button onClick={() => removePendingDuplicate(tempId)} className="text-brand-gray hover:text-brand-red">
+                      Quitar
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {!list && <p className="text-sm text-brand-gray">Todavía no hay listas en este proyecto.</p>}
 
           {list && (
             <div className="space-y-6">
               {groupsOfList.map((group) => {
-                const groupTasks = tasks.filter((t) => t.group_id === group.id)
+                const groupTaskIds = boardDraft
+                  ? boardDraft[group.id] ?? []
+                  : tasks
+                      .filter((t) => t.group_id === group.id)
+                      .sort((a, b) => a.sort_order - b.sort_order)
+                      .map((t) => t.id)
+                const groupTasks = groupTaskIds
+                  .map((id): Task | null => {
+                    if (id.startsWith('new:')) {
+                      const pd = pendingDuplicates[id]
+                      return pd ? { ...pd.source, id, group_id: pd.targetGroupId } : null
+                    }
+                    return tasks.find((t) => t.id === id) ?? null
+                  })
+                  .filter((t): t is Task => !!t)
                 const gPlanned = groupTasks.reduce((s, t) => s + Number(t.planned_amount), 0)
                 const gActual = groupTasks.reduce((s, t) => s + Number(t.actual_amount), 0)
+
+                function dropOnGroup(toIndex: number) {
+                  if (!draggedTaskId) return
+                  moveTaskInBoard(draggedTaskId, group.id, toIndex)
+                  setDraggedTaskId(null)
+                }
+
                 return (
                   <div key={group.id} className="bg-white border border-brand-line rounded-xl overflow-hidden">
                     <GroupHeader
@@ -518,49 +701,81 @@ export default function ProjectDetail() {
                       }}
                     />
                     <div className="divide-y divide-brand-line">
-                      {groupTasks.map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          axes={axes}
-                          providers={providers ?? []}
-                          allTasks={tasks}
-                          dependencies={data.dependencies}
-                          currency={project.currency}
-                          canEdit={canEdit}
-                          isOpen={openTaskId === task.id}
-                          onToggle={() => setOpenTaskId(openTaskId === task.id ? null : task.id)}
-                          onUpdate={(patch) => updateTask.mutate({ id: task.id, patch })}
-                          onDelete={() => {
-                            if (confirm(`¿Eliminar la tarea "${task.title}"?`)) deleteTask.mutate(task.id)
-                          }}
-                          onAddProvider={(input) => addProvider.mutateAsync(input)}
-                          onAddDependency={(dependsOnId) => addDependency.mutate({ taskId: task.id, dependsOnId })}
-                          onRemoveDependency={(dependsOnId) => removeDependency.mutate({ taskId: task.id, dependsOnId })}
-                          draggable={canEdit}
-                          isDragging={draggedTaskId === task.id}
-                          onDragStart={() => setDraggedTaskId(task.id)}
-                          onDragEnd={() => setDraggedTaskId(null)}
-                          onDropOn={() => {
-                            if (!draggedTaskId || draggedTaskId === task.id) return
-                            const order = groupTasks.map((t) => t.id)
-                            const fromIdx = order.indexOf(draggedTaskId)
-                            const toIdx = order.indexOf(task.id)
-                            if (fromIdx === -1 || toIdx === -1) return
-                            order.splice(toIdx, 0, order.splice(fromIdx, 1)[0])
-                            reorderTasks.mutate(order)
-                            setDraggedTaskId(null)
-                          }}
-                        />
-                      ))}
+                      {groupTasks.map((task) =>
+                        task.id.startsWith('new:') ? (
+                          <PendingTaskRow
+                            key={task.id}
+                            task={task}
+                            axes={axes}
+                            currency={project.currency}
+                            draggable={canEdit}
+                            isDragging={draggedTaskId === task.id}
+                            onDragStart={() => setDraggedTaskId(task.id)}
+                            onDragEnd={() => setDraggedTaskId(null)}
+                            onDropOn={() => {
+                              if (!draggedTaskId || draggedTaskId === task.id) return
+                              dropOnGroup(groupTaskIds.indexOf(task.id))
+                            }}
+                            onRemove={() => removePendingDuplicate(task.id)}
+                          />
+                        ) : (
+                          <TaskRow
+                            key={task.id}
+                            task={task}
+                            axes={axes}
+                            providers={providers ?? []}
+                            allTasks={tasks}
+                            dependencies={data.dependencies}
+                            currency={project.currency}
+                            canEdit={canEdit}
+                            isOpen={openTaskId === task.id}
+                            onToggle={() => setOpenTaskId(openTaskId === task.id ? null : task.id)}
+                            onUpdate={(patch) => updateTask.mutate({ id: task.id, patch })}
+                            onDelete={() => {
+                              if (confirm(`¿Eliminar la tarea "${task.title}"?`)) deleteTask.mutate(task.id)
+                            }}
+                            onAddProvider={(input) => addProvider.mutateAsync(input)}
+                            onAddDependency={(dependsOnId) => addDependency.mutate({ taskId: task.id, dependsOnId })}
+                            onRemoveDependency={(dependsOnId) => removeDependency.mutate({ taskId: task.id, dependsOnId })}
+                            draggable={canEdit}
+                            isDragging={draggedTaskId === task.id}
+                            onDragStart={() => setDraggedTaskId(task.id)}
+                            onDragEnd={() => setDraggedTaskId(null)}
+                            onDropOn={() => {
+                              if (!draggedTaskId || draggedTaskId === task.id) return
+                              dropOnGroup(groupTaskIds.indexOf(task.id))
+                            }}
+                            lists={data.lists}
+                            allGroups={data.groups}
+                            onDuplicate={(targetGroupId) => duplicateTaskTo(task, targetGroupId)}
+                          />
+                        ),
+                      )}
                       {groupTasks.length === 0 && (
                         <p className="text-sm text-brand-gray px-5 py-4">Sin tareas todavía.</p>
                       )}
+                      {canEdit && (
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault()
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            dropOnGroup(groupTaskIds.length)
+                          }}
+                          className="h-3"
+                        />
+                      )}
                     </div>
-                    {canEdit && (
+                    {canEdit && !boardDirty && (
                       <div className="px-5 py-3 bg-brand-cream/50">
                         <AddTaskForm axes={axes} onSubmit={(input) => addTask.mutate({ groupId: group.id, ...input })} />
                       </div>
+                    )}
+                    {canEdit && boardDirty && (
+                      <p className="px-5 py-3 bg-brand-cream/50 text-xs text-brand-gray">
+                        Guardá o descartá los cambios pendientes antes de agregar una tarea nueva.
+                      </p>
                     )}
                   </div>
                 )
@@ -1090,6 +1305,9 @@ function TaskRow({
   onDragStart,
   onDragEnd,
   onDropOn,
+  lists,
+  allGroups,
+  onDuplicate,
 }: {
   task: Task
   axes: Axis[]
@@ -1110,6 +1328,9 @@ function TaskRow({
   onDragStart: () => void
   onDragEnd: () => void
   onDropOn: () => void
+  lists: List[]
+  allGroups: Group[]
+  onDuplicate: (targetGroupId: string) => void
 }) {
   const axis = axes.find((a) => a.id === task.axis_id)
   const dependsOn = dependencies.filter((d) => d.task_id === task.id).map((d) => allTasks.find((t) => t.id === d.depends_on_task_id)).filter((t): t is Task => !!t)
@@ -1121,6 +1342,7 @@ function TaskRow({
   const [newProviderCuit, setNewProviderCuit] = useState('')
   const [draft, setDraft] = useState<TaskDraft>(() => draftFromTask(task))
   const [dragOver, setDragOver] = useState(false)
+  const [showDuplicate, setShowDuplicate] = useState(false)
 
   // Vuelve a sincronizar el borrador con el servidor cuando la tarea cambia por fuera
   // (guardado exitoso, u otro cambio remoto) — evita pisar ediciones a medio hacer sin motivo.
@@ -1220,8 +1442,18 @@ function TaskRow({
           {currency} {money(Number(task.planned_amount))}
         </span>
         {canEdit && (
-          <span className="flex gap-1">
+          <span className="flex gap-1 relative">
             <IconButton title="Renombrar" onClick={() => setTitleEditing(true)}>✎</IconButton>
+            <IconButton title="Duplicar" onClick={() => setShowDuplicate((v) => !v)}>⧉</IconButton>
+            {showDuplicate && (
+              <DuplicatePicker
+                lists={lists}
+                allGroups={allGroups}
+                currentGroupId={task.group_id}
+                onDuplicate={onDuplicate}
+                onClose={() => setShowDuplicate(false)}
+              />
+            )}
             <IconButton title="Eliminar" onClick={onDelete}>×</IconButton>
           </span>
         )}
@@ -1412,6 +1644,145 @@ function TaskRow({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function DuplicatePicker({
+  lists,
+  allGroups,
+  currentGroupId,
+  onDuplicate,
+  onClose,
+}: {
+  lists: List[]
+  allGroups: Group[]
+  currentGroupId: string
+  onDuplicate: (targetGroupId: string) => void
+  onClose: () => void
+}) {
+  const currentGroup = allGroups.find((g) => g.id === currentGroupId)
+  const [listId, setListId] = useState(currentGroup?.list_id ?? lists[0]?.id ?? '')
+  const groupsOfSelectedList = allGroups.filter((g) => g.list_id === listId)
+  const [groupId, setGroupId] = useState(currentGroupId)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-full mt-1 z-20 bg-white border border-brand-line rounded-lg shadow-lg p-3 space-y-2 w-56"
+    >
+      <p className="text-xs font-semibold text-brand-carbon">Duplicar a…</p>
+      <select
+        value={listId}
+        onChange={(e) => {
+          setListId(e.target.value)
+          const firstGroup = allGroups.find((g) => g.list_id === e.target.value)
+          setGroupId(firstGroup?.id ?? '')
+        }}
+        className="w-full text-xs px-2 py-1.5 rounded-md border border-brand-line"
+      >
+        {lists.map((l) => (
+          <option key={l.id} value={l.id}>{l.name}</option>
+        ))}
+      </select>
+      <select
+        value={groupId}
+        onChange={(e) => setGroupId(e.target.value)}
+        className="w-full text-xs px-2 py-1.5 rounded-md border border-brand-line"
+      >
+        {groupsOfSelectedList.length === 0 && <option value="">Sin grupos en esa lista</option>}
+        {groupsOfSelectedList.map((g) => (
+          <option key={g.id} value={g.id}>{g.name}</option>
+        ))}
+      </select>
+      <div className="flex justify-end gap-2 pt-1">
+        <button onClick={onClose} className="text-xs text-brand-gray hover:text-brand-carbon">Cancelar</button>
+        <button
+          onClick={() => {
+            if (!groupId) return
+            onDuplicate(groupId)
+            onClose()
+          }}
+          disabled={!groupId}
+          className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white disabled:opacity-40"
+        >
+          Duplicar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PendingTaskRow({
+  task,
+  axes,
+  currency,
+  draggable,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+  onDropOn,
+  onRemove,
+}: {
+  task: Task
+  axes: Axis[]
+  currency: string
+  draggable: boolean
+  isDragging: boolean
+  onDragStart: () => void
+  onDragEnd: () => void
+  onDropOn: () => void
+  onRemove: () => void
+}) {
+  const axis = axes.find((a) => a.id === task.axis_id)
+  const [dragOver, setDragOver] = useState(false)
+
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => {
+        if (!draggable) return
+        e.preventDefault()
+        if (!dragOver) setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        if (!draggable) return
+        e.preventDefault()
+        setDragOver(false)
+        onDropOn()
+      }}
+      className={`px-5 py-3 flex items-center gap-3 bg-brand-orange/5 ${isDragging ? 'opacity-40' : ''} ${dragOver ? 'border-t-2 border-brand-orange' : ''}`}
+    >
+      {draggable && <span title="Arrastrar para reordenar" className="cursor-grab text-brand-gray/50 select-none">⠿</span>}
+      <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-brand-orange text-white flex-shrink-0">
+        Nueva
+      </span>
+      <span className="flex-1 text-sm font-semibold text-brand-carbon">{task.title}</span>
+      {axis && (
+        <span
+          className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full"
+          style={{ backgroundColor: axis.color + '20', color: axis.color }}
+        >
+          {axis.name}
+        </span>
+      )}
+      <span className="text-sm font-semibold text-brand-carbon w-28 text-right">
+        {currency} {money(Number(task.planned_amount))}
+      </span>
+      <IconButton title="Quitar" onClick={onRemove}>×</IconButton>
     </div>
   )
 }
