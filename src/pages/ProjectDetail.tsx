@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { STATUS_LABEL, STATUS_COLOR, money, projectedClose } from '../lib/taskHelpers'
+import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import BrandMark from '../components/BrandMark'
 import ClientLogoEditor from '../components/ClientLogoEditor'
 import ProjectMembersPanel from '../components/ProjectMembersPanel'
@@ -38,6 +39,8 @@ export default function ProjectDetail() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [boardDraft, setBoardDraft] = useState<BoardDraft | null>(null)
   const [pendingDuplicates, setPendingDuplicates] = useState<Record<string, PendingDuplicate>>({})
+  const boardDirty = boardDraft !== null || Object.keys(pendingDuplicates).length > 0
+  useUnsavedChangesGuard(boardDirty)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['project-detail', slug],
@@ -454,7 +457,6 @@ export default function ProjectDetail() {
     setPendingDuplicates({})
   }
 
-  const boardDirty = boardDraft !== null || Object.keys(pendingDuplicates).length > 0
   const crossListDuplicates = Object.entries(pendingDuplicates).filter(
     ([, pd]) => !groupsOfList.some((g) => g.id === pd.targetGroupId),
   )
@@ -1078,6 +1080,15 @@ function AxisEditor({
   const delta = sum - totalBudget
   const balanced = delta === 0
 
+  const rowsDirty =
+    rows.length !== axes.length ||
+    rows.some((r) => {
+      if (r.id === null) return r.name.trim().length > 0
+      const original = axes.find((a) => a.id === r.id)
+      return !original || original.name !== r.name || original.color !== r.color || String(original.budget_amount) !== r.budget
+    })
+  useUnsavedChangesGuard(reason.trim().length > 0 || rowsDirty)
+
   const floorErrors = rows
     .filter((r) => r.id !== null)
     .map((r) => ({ row: r, floor: floors.get(r.id!) ?? 0 }))
@@ -1361,6 +1372,7 @@ function TaskRow({
     draft.campaignRef !== original.campaignRef ||
     draft.subtasksText !== original.subtasksText ||
     draft.deliverable !== original.deliverable
+  useUnsavedChangesGuard(dirty)
 
   function saveDraft() {
     onUpdate({
