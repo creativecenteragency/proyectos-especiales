@@ -4,8 +4,13 @@ import { supabase } from '../lib/supabase'
 import type { Profile, ProjectRole } from '../types/database'
 
 type MemberRow = { project_id: string; user_id: string; role: ProjectRole; profiles: Profile | null }
+type MemberStatus = { confirmed: boolean; last_sign_in_at: string | null; invited_at: string | null }
 
 const ROLE_LABEL: Record<ProjectRole, string> = { team: 'Equipo de agencia', auditor: 'Auditor / Cliente' }
+
+function daysAgo(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24)))
+}
 
 export default function ProjectMembersPanel({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient()
@@ -24,6 +29,20 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
       if (error) throw error
       return (data ?? []) as unknown as MemberRow[]
     },
+  })
+
+  const memberIds = (members ?? []).map((m) => m.user_id)
+  const { data: statuses } = useQuery({
+    queryKey: ['project-members-status', projectId, memberIds],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke<{ ok: boolean; statuses?: Record<string, MemberStatus> }>(
+        'member-status',
+        { body: { user_ids: memberIds } },
+      )
+      if (error) throw error
+      return data?.statuses ?? {}
+    },
+    enabled: memberIds.length > 0,
   })
 
   function invalidate() {
@@ -72,10 +91,38 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
       {isLoading && <p className="text-xs text-brand-gray">Cargando…</p>}
 
       <div className="space-y-2">
-        {(members ?? []).map((m) => (
-          <div key={m.user_id} className="flex items-center gap-2 text-sm">
-            <span className="flex-1 text-brand-carbon">{m.profiles?.full_name || m.profiles?.email || m.user_id}</span>
-            {m.profiles?.full_name && <span className="text-xs text-brand-gray">{m.profiles.email}</span>}
+        {(members ?? []).map((m) => {
+          const status = statuses?.[m.user_id]
+          return (
+          <div key={m.user_id} className="flex items-center gap-2 text-sm py-1">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-brand-carbon">{m.profiles?.full_name || m.profiles?.email || m.user_id}</span>
+                {m.profiles?.full_name && <span className="text-xs text-brand-gray">{m.profiles.email}</span>}
+              </div>
+              {status && (
+                <p className="text-[11px] text-brand-gray mt-0.5">
+                  {status.confirmed
+                    ? status.last_sign_in_at
+                      ? `Última conexión: ${new Date(status.last_sign_in_at).toLocaleString('es-AR')} (hace ${daysAgo(status.last_sign_in_at)}d)`
+                      : 'Cuenta activa — todavía sin registro de ingreso'
+                    : status.invited_at
+                      ? `Invitado hace ${daysAgo(status.invited_at)}d — todavía no ingresó`
+                      : 'Todavía no ingresó'}
+                </p>
+              )}
+            </div>
+            {status && (
+              status.confirmed ? (
+                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-green/15 text-brand-green">
+                  ✓ Cuenta activa
+                </span>
+              ) : (
+                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-orange/15 text-brand-orange">
+                  ⏳ Invitación pendiente
+                </span>
+              )
+            )}
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-cream text-brand-gray">
               {ROLE_LABEL[m.role]}
             </span>
@@ -88,7 +135,8 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
               Quitar
             </button>
           </div>
-        ))}
+          )
+        })}
         {(members ?? []).length === 0 && !isLoading && (
           <p className="text-xs text-brand-gray">Todavía nadie más tiene acceso a este proyecto.</p>
         )}
