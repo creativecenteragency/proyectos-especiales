@@ -19,6 +19,10 @@
     "none": "Ninguna.",
     "noAxis": "Sin eje",
     "dragToReorder": "Arrastrar para reordenar",
+    "retranslate": "Retraducir al portugués",
+    "retranslating": "Traduciendo…",
+    "retranslateError": "No se pudo traducir: {{error}}",
+    "retranslateFailed": "DeepL no devolvió una traducción. Probá de nuevo en un momento.",
     "status": {
       "preparacion": "Preparación",
       "planificado": "Planificado",

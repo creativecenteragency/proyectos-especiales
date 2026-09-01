@@ -399,6 +399,17 @@ export default function ProjectDetail() {
     onSuccess: invalidateProviders,
   })
 
+  const retranslate = useMutation({
+    mutationFn: async ({ table, id, sourceText, column }: { table: string; id: string; sourceText: string; column: string }) => {
+      const pt = await translateToPt(sourceText)
+      if (!pt) throw new Error(t('common.retranslateFailed'))
+      const { error } = await supabase.from(table).update({ [column]: pt }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+    onError: (err: unknown) => alert(t('common.retranslateError', { error: err instanceof Error ? err.message : String(err) })),
+  })
+
   if (isLoading) return <div className="min-h-screen flex items-center justify-center text-brand-gray">{t('common.loading')}</div>
   if (error || !data) return <div className="min-h-screen flex items-center justify-center text-brand-red">{t('projectDetail.loadError')}</div>
 
@@ -610,6 +621,7 @@ export default function ProjectDetail() {
               changeLog={data.changeLog}
               onSave={(rows, reason, adjustTotal) => saveAxisPlan.mutate({ rows, reason, adjustTotal })}
               onDelete={(axis, reason) => deleteAxis.mutate({ axis, reason })}
+              onRetranslate={(axis) => retranslate.mutate({ table: 'axes', id: axis.id, sourceText: axis.name, column: 'name_pt' })}
             />
           )}
         </section>
@@ -628,6 +640,7 @@ export default function ProjectDetail() {
                 onDelete={() => {
                   if (confirm(t('projectDetail.board.deleteListConfirm', { name: l.name }))) deleteList.mutate(l.id)
                 }}
+                onRetranslate={() => retranslate.mutate({ table: 'lists', id: l.id, sourceText: l.name, column: 'name_pt' })}
               />
             ))}
             {canEdit && <AddInline placeholder={t('projectDetail.board.newList')} onSubmit={(name) => addList.mutate(name)} />}
@@ -721,6 +734,7 @@ export default function ProjectDetail() {
                       onDelete={() => {
                         if (confirm(t('projectDetail.board.deleteGroupConfirm', { name: group.name }))) deleteGroup.mutate(group.id)
                       }}
+                      onRetranslate={() => retranslate.mutate({ table: 'groups', id: group.id, sourceText: group.name, column: 'name_pt' })}
                     />
                     <div className="divide-y divide-brand-line">
                       {groupTasks.map((task) =>
@@ -771,6 +785,7 @@ export default function ProjectDetail() {
                             lists={data.lists}
                             allGroups={data.groups}
                             onDuplicate={(targetGroupId) => duplicateTaskTo(task, targetGroupId)}
+                            onRetranslate={() => retranslate.mutate({ table: 'tasks', id: task.id, sourceText: task.title, column: 'title_pt' })}
                           />
                         ),
                       )}
@@ -832,6 +847,7 @@ function ListTab({
   onSelect,
   onRename,
   onDelete,
+  onRetranslate,
 }: {
   list: List
   lang: string
@@ -840,6 +856,7 @@ function ListTab({
   onSelect: () => void
   onRename: (name: string) => void
   onDelete: () => void
+  onRetranslate: () => void
 }) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
@@ -885,6 +902,7 @@ function ListTab({
       {canEdit && (
         <span className="absolute -top-2 -right-2 hidden group-hover:flex gap-0.5">
           <IconButton title={t('common.rename')} onClick={() => setEditing(true)}>✎</IconButton>
+          <IconButton title={t('common.retranslate')} onClick={onRetranslate}>🌐</IconButton>
           <IconButton title={t('common.delete')} onClick={onDelete}>×</IconButton>
         </span>
       )}
@@ -899,6 +917,7 @@ function GroupHeader({
   summary,
   onRename,
   onDelete,
+  onRetranslate,
 }: {
   group: Group
   lang: string
@@ -906,6 +925,7 @@ function GroupHeader({
   summary: string
   onRename: (name: string) => void
   onDelete: () => void
+  onRetranslate: () => void
 }) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
@@ -941,6 +961,7 @@ function GroupHeader({
         {canEdit && !editing && (
           <span className="flex gap-1">
             <IconButton title={t('common.rename')} onClick={() => setEditing(true)} dark>✎</IconButton>
+            <IconButton title={t('common.retranslate')} onClick={onRetranslate} dark>🌐</IconButton>
             <IconButton title={t('common.delete')} onClick={onDelete} dark>×</IconButton>
           </span>
         )}
@@ -1078,6 +1099,7 @@ function AxisEditor({
   changeLog,
   onSave,
   onDelete,
+  onRetranslate,
 }: {
   axes: Axis[]
   tasks: Task[]
@@ -1087,6 +1109,7 @@ function AxisEditor({
   changeLog: AxisChangeLog[]
   onSave: (rows: { id: string | null; name: string; color: string; budget: number }[], reason: string, adjustTotal: boolean) => void
   onDelete: (axis: Axis, reason: string) => void
+  onRetranslate: (axis: Axis) => void
 }) {
   const { t, i18n } = useTranslation()
   const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
@@ -1201,6 +1224,17 @@ function AxisEditor({
                   </span>
                 )}
               </div>
+              {row.id !== null && (
+                <IconButton
+                  title={t('common.retranslate')}
+                  onClick={() => {
+                    const original = axes.find((a) => a.id === row.id)
+                    if (original) onRetranslate(original)
+                  }}
+                >
+                  🌐
+                </IconButton>
+              )}
               {row.id === null ? (
                 <button type="button" onClick={() => removeDraftRow(row.key)} className="text-xs text-brand-gray hover:text-brand-red">
                   {t('common.remove')}
@@ -1353,6 +1387,7 @@ function TaskRow({
   lists,
   allGroups,
   onDuplicate,
+  onRetranslate,
 }: {
   task: Task
   lang: string
@@ -1377,6 +1412,7 @@ function TaskRow({
   lists: List[]
   allGroups: Group[]
   onDuplicate: (targetGroupId: string) => void
+  onRetranslate: () => void
 }) {
   const { t } = useTranslation()
   const axis = axes.find((a) => a.id === task.axis_id)
@@ -1492,6 +1528,7 @@ function TaskRow({
         {canEdit && (
           <span className="flex gap-1 relative">
             <IconButton title={t('common.rename')} onClick={() => setTitleEditing(true)}>✎</IconButton>
+            <IconButton title={t('common.retranslate')} onClick={onRetranslate}>🌐</IconButton>
             <IconButton title={t('projectDetail.taskRow.duplicate')} onClick={() => setShowDuplicate((v) => !v)}>⧉</IconButton>
             {showDuplicate && (
               <DuplicatePicker
