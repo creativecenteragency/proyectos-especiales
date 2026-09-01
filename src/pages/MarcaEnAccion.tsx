@@ -1,28 +1,29 @@
 import { useState, type FormEvent } from 'react'
 import { useParams, Link, Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { money } from '../lib/taskHelpers'
 import type { Integration, IntegrationProvider, Project, Task } from '../types/database'
 
-const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
-  facebook: 'Meta Ads (Windsor)',
-  google_ads: 'Google Ads (Windsor)',
-  instagram: 'Instagram orgánico (Windsor)',
-  google_analytics: 'Google Analytics (MasterMetrics)',
-  tiendanube: 'Tiendanube (MasterMetrics)',
-  metricool_organic: 'Redes orgánicas (Metricool)',
+const PROVIDER_LABEL_KEY: Record<IntegrationProvider, string> = {
+  facebook: 'marcaEnAccion.providerLabel.facebook',
+  google_ads: 'marcaEnAccion.providerLabel.google_ads',
+  instagram: 'marcaEnAccion.providerLabel.instagram',
+  google_analytics: 'marcaEnAccion.providerLabel.google_analytics',
+  tiendanube: 'marcaEnAccion.providerLabel.tiendanube',
+  metricool_organic: 'marcaEnAccion.providerLabel.metricool_organic',
 }
 
 const WINDSOR_READY: IntegrationProvider[] = ['facebook', 'google_ads', 'instagram']
 
-const ERROR_LABEL: Record<string, string> = {
-  windsor_not_configured: 'Falta configurar la API key de Windsor (WINDSOR_API_KEY) en los secretos del proyecto de Supabase.',
-  forbidden: 'No tenés permiso para ver esta conexión.',
-  integration_not_found: 'Esta conexión ya no existe.',
-  windsor_request_failed: 'Windsor no pudo responder la consulta. Revisá la API key o intentá de nuevo.',
-  provider_not_supported_yet: 'Esta fuente todavía no está conectada.',
+const ERROR_LABEL_KEY: Record<string, string> = {
+  windsor_not_configured: 'marcaEnAccion.errorLabel.windsor_not_configured',
+  forbidden: 'marcaEnAccion.errorLabel.forbidden',
+  integration_not_found: 'marcaEnAccion.errorLabel.integration_not_found',
+  windsor_request_failed: 'marcaEnAccion.errorLabel.windsor_request_failed',
+  provider_not_supported_yet: 'marcaEnAccion.errorLabel.provider_not_supported_yet',
 }
 
 type SyncResult = {
@@ -35,6 +36,8 @@ type SyncResult = {
 }
 
 export default function MarcaEnAccion() {
+  const { t, i18n } = useTranslation()
+  const numberLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
   const { slug } = useParams<{ slug: string }>()
   const { profile, session } = useAuth()
   const queryClient = useQueryClient()
@@ -117,7 +120,8 @@ export default function MarcaEnAccion() {
       if (ctx && typeof ctx.json === 'function') {
         try {
           const body = await ctx.json()
-          message = ERROR_LABEL[body.error as string] ?? body.error ?? message
+          const key = ERROR_LABEL_KEY[body.error as string]
+          message = key ? t(key) : (body.error ?? message)
         } catch {
           // el cuerpo no era JSON, se mantiene el mensaje genérico
         }
@@ -125,30 +129,28 @@ export default function MarcaEnAccion() {
       setResults((r) => ({ ...r, [integration.id]: { ok: false, error: message } }))
       return
     }
-    setResults((r) => ({ ...r, [integration.id]: result ?? { ok: false, error: 'Sin respuesta' } }))
+    setResults((r) => ({ ...r, [integration.id]: result ?? { ok: false, error: t('marcaEnAccion.noResponse') } }))
   }
 
-  if (isLoading || !data) return <div className="min-h-screen flex items-center justify-center text-brand-gray">Cargando…</div>
+  if (isLoading || !data) return <div className="min-h-screen flex items-center justify-center text-brand-gray">{t('marcaEnAccion.loading')}</div>
   if (!canAccess) return <Navigate to={`/proyecto/${slug}`} replace />
 
   return (
     <div className="min-h-screen bg-brand-cream">
       <header className="bg-brand-carbon text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
-          <Link to={`/proyecto/${data.project.slug}`} className="text-xs text-white/60 hover:text-white">← Volver al proyecto</Link>
+          <Link to={`/proyecto/${data.project.slug}`} className="text-xs text-white/60 hover:text-white">{t('marcaEnAccion.backToProject')}</Link>
           <div className="flex items-center gap-2 mt-3">
-            <h1 className="text-2xl font-display font-semibold">Marca en Acción</h1>
+            <h1 className="text-2xl font-display font-semibold">{t('marcaEnAccion.title')}</h1>
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-orange/20 text-brand-orange">BETA</span>
           </div>
-          <p className="text-sm text-white/70 mt-1 max-w-xl">
-            Datos reales de campañas y redes, sincronizados vía Windsor / MasterMetrics / Metricool. Solo visible para la agencia y el Owner.
-          </p>
+          <p className="text-sm text-white/70 mt-1 max-w-xl">{t('marcaEnAccion.subtitle')}</p>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <section className="bg-white border border-brand-line rounded-xl p-5">
-          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-3">Conexiones de este proyecto</h2>
+          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-3">{t('marcaEnAccion.connectionsTitle')}</h2>
 
           <div className="space-y-3">
             {data.integrations.map((integration) => {
@@ -159,40 +161,40 @@ export default function MarcaEnAccion() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-brand-carbon">{integration.label}</span>
                     <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-cream text-brand-gray">
-                      {PROVIDER_LABEL[integration.provider]}
+                      {t(PROVIDER_LABEL_KEY[integration.provider])}
                     </span>
-                    <span className="text-xs text-brand-gray">cuenta: {integration.account_ref}</span>
+                    <span className="text-xs text-brand-gray">{t('marcaEnAccion.account', { ref: integration.account_ref })}</span>
                     <div className="ml-auto flex items-center gap-2">
                       {ready ? (
                         <button
                           onClick={() => sync(integration)}
                           className="text-xs font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white"
                         >
-                          Sincronizar (30d)
+                          {t('marcaEnAccion.sync')}
                         </button>
                       ) : (
-                        <span className="text-xs text-brand-gray">Conexión pendiente de configurar</span>
+                        <span className="text-xs text-brand-gray">{t('marcaEnAccion.pendingConfig')}</span>
                       )}
                       <button
                         onClick={() => {
-                          if (confirm(`¿Quitar la conexión "${integration.label}"?`)) deleteIntegration.mutate(integration.id)
+                          if (confirm(t('marcaEnAccion.removeConfirm', { label: integration.label }))) deleteIntegration.mutate(integration.id)
                         }}
                         className="text-xs text-brand-gray hover:text-brand-red"
                       >
-                        Quitar
+                        {t('marcaEnAccion.remove')}
                       </button>
                     </div>
                   </div>
 
                   {result && (
                     <div className="mt-3 pt-3 border-t border-brand-line text-sm">
-                      {!result.ok && <p className="text-brand-red text-xs">Error: {result.error}</p>}
-                      {result.ok && !result.summary && <p className="text-brand-gray text-xs">Sincronizando…</p>}
+                      {!result.ok && <p className="text-brand-red text-xs">{t('marcaEnAccion.error', { message: result.error })}</p>}
+                      {result.ok && !result.summary && <p className="text-brand-gray text-xs">{t('marcaEnAccion.syncing')}</p>}
                       {result.ok && result.summary && (
                         <>
                           {!result.matchedAccount && (
                             <p className="text-[11px] text-brand-gray mb-2">
-                              No se encontró una cuenta que coincida con "{integration.account_ref}" — mostrando todas las cuentas conectadas.
+                              {t('marcaEnAccion.notMatchedAccount', { ref: integration.account_ref })}
                             </p>
                           )}
                           <div className="flex flex-wrap gap-4 mb-2">
@@ -200,7 +202,7 @@ export default function MarcaEnAccion() {
                               <div key={key}>
                                 <div className="text-[10px] uppercase tracking-wider text-brand-gray">{key}</div>
                                 <div className="font-display font-semibold text-brand-carbon">
-                                  {key === 'spend' ? money(value) : value.toLocaleString('es-AR')}
+                                  {key === 'spend' ? money(value) : value.toLocaleString(numberLocale)}
                                 </div>
                               </div>
                             ))}
@@ -209,15 +211,15 @@ export default function MarcaEnAccion() {
                             <table className="w-full text-xs mt-2">
                               <thead>
                                 <tr className="text-left text-brand-gray border-b border-brand-line">
-                                  <th className="py-1 pr-2 font-medium">Campaña</th>
-                                  <th className="py-1 pr-2 font-medium text-right">Gasto</th>
-                                  <th className="py-1 font-medium text-right">Clics</th>
+                                  <th className="py-1 pr-2 font-medium">{t('marcaEnAccion.table.campaign')}</th>
+                                  <th className="py-1 pr-2 font-medium text-right">{t('marcaEnAccion.table.spend')}</th>
+                                  <th className="py-1 font-medium text-right">{t('marcaEnAccion.table.clicks')}</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {result.campaigns.slice(0, 8).map((c) => {
-                                  const linked = data.linkedTasks.filter((t) =>
-                                    t.campaign_ref && c.campaign.toLowerCase().includes(t.campaign_ref.toLowerCase()),
+                                  const linked = data.linkedTasks.filter((lt) =>
+                                    lt.campaign_ref && c.campaign.toLowerCase().includes(lt.campaign_ref.toLowerCase()),
                                   )
                                   return (
                                     <tr key={c.campaign} className="border-b border-brand-line">
@@ -225,12 +227,12 @@ export default function MarcaEnAccion() {
                                         {c.campaign}
                                         {linked.length > 0 && (
                                           <div className="text-[10px] text-brand-orange">
-                                            ↳ potenciada por: {linked.map((t) => t.title).join(', ')}
+                                            {t('marcaEnAccion.poweredBy', { tasks: linked.map((lt) => lt.title).join(', ') })}
                                           </div>
                                         )}
                                       </td>
                                       <td className="py-1 pr-2 text-right">{money(c.spend)}</td>
-                                      <td className="py-1 text-right">{c.clicks.toLocaleString('es-AR')}</td>
+                                      <td className="py-1 text-right">{c.clicks.toLocaleString(numberLocale)}</td>
                                     </tr>
                                   )
                                 })}
@@ -245,7 +247,7 @@ export default function MarcaEnAccion() {
               )
             })}
             {data.integrations.length === 0 && (
-              <p className="text-sm text-brand-gray">Todavía no hay conexiones configuradas para este proyecto.</p>
+              <p className="text-sm text-brand-gray">{t('marcaEnAccion.noConnections')}</p>
             )}
           </div>
 
@@ -261,34 +263,31 @@ export default function MarcaEnAccion() {
               onChange={(e) => setProvider(e.target.value as IntegrationProvider)}
               className="text-sm px-2 py-1.5 rounded-md border border-brand-line"
             >
-              {(Object.entries(PROVIDER_LABEL) as [IntegrationProvider, string][]).map(([value, lab]) => (
-                <option key={value} value={value}>{lab}</option>
+              {(Object.entries(PROVIDER_LABEL_KEY) as [IntegrationProvider, string][]).map(([value, key]) => (
+                <option key={value} value={value}>{t(key)}</option>
               ))}
             </select>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Nombre para identificarla…"
+              placeholder={t('marcaEnAccion.form.labelPlaceholder')}
               className="text-sm px-3 py-1.5 rounded-md border border-brand-line flex-1 min-w-[160px]"
             />
             <input
               value={accountRef}
               onChange={(e) => setAccountRef(e.target.value)}
-              placeholder="Cuenta (nombre o ID, ej: Oxford - Argentina)"
+              placeholder={t('marcaEnAccion.form.accountPlaceholder')}
               className="text-sm px-3 py-1.5 rounded-md border border-brand-line flex-1 min-w-[200px]"
             />
             <button type="submit" className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white">
-              + Conexión
+              {t('marcaEnAccion.form.submit')}
             </button>
           </form>
         </section>
 
         <section className="bg-white border border-brand-line rounded-xl p-5">
-          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-2">Cómo vincular una tarea a una campaña</h2>
-          <p className="text-sm text-brand-gray">
-            Desde el proyecto, abrí cualquier tarea y completá "Campaña / posteo vinculado" con el nombre de la campaña real (o el link
-            del posteo). Cuando sincronices acá, si el nombre coincide, la vas a ver marcada como "potenciada por" esa tarea.
-          </p>
+          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-2">{t('marcaEnAccion.howToLinkTitle')}</h2>
+          <p className="text-sm text-brand-gray">{t('marcaEnAccion.howToLinkBody')}</p>
         </section>
       </main>
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
@@ -9,6 +10,7 @@ import type { Project, Provider, ProviderProject, Task } from '../types/database
 const money = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
 export default function ProvidersPage() {
+  const { t } = useTranslation()
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -97,28 +99,26 @@ export default function ProvidersPage() {
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BrandMark className="h-8 w-8" />
-            <h1 className="font-display font-semibold text-brand-carbon">Proveedores</h1>
+            <h1 className="font-display font-semibold text-brand-carbon">{t('providersPage.title')}</h1>
           </div>
-          <Link to="/" className="text-sm text-brand-gray hover:text-brand-carbon">← Proyectos</Link>
+          <Link to="/" className="text-sm text-brand-gray hover:text-brand-carbon">{t('providersPage.backToProjects')}</Link>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10 space-y-6">
-        <p className="text-sm text-brand-gray">
-          Vista directiva, transversal a todos los proyectos: % de la inversión total ejecutada que se llevó cada proveedor.
-        </p>
+        <p className="text-sm text-brand-gray">{t('providersPage.subtitle')}</p>
 
-        {(loadingProviders || loadingTasks) && <p className="text-sm text-brand-gray">Cargando…</p>}
+        {(loadingProviders || loadingTasks) && <p className="text-sm text-brand-gray">{t('providersPage.loading')}</p>}
 
         <div className="bg-white border border-brand-line rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-brand-carbon text-white text-left">
-                <th className="px-4 py-2 font-semibold">Proveedor</th>
-                <th className="px-4 py-2 font-semibold">CUIT</th>
-                <th className="px-4 py-2 font-semibold">Proyectos</th>
-                <th className="px-4 py-2 font-semibold text-right">Invertido</th>
-                <th className="px-4 py-2 font-semibold text-right">% del total</th>
+                <th className="px-4 py-2 font-semibold">{t('providersPage.table.provider')}</th>
+                <th className="px-4 py-2 font-semibold">{t('providersPage.table.cuit')}</th>
+                <th className="px-4 py-2 font-semibold">{t('providersPage.table.projects')}</th>
+                <th className="px-4 py-2 font-semibold text-right">{t('providersPage.table.invested')}</th>
+                <th className="px-4 py-2 font-semibold text-right">{t('providersPage.table.pctTotal')}</th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
@@ -148,18 +148,18 @@ export default function ProvidersPage() {
                     <td className="px-4 py-2 text-right">
                       <button
                         onClick={() => {
-                          if (confirm(`¿Eliminar proveedor "${p.name}"?`)) deleteProvider.mutate(p.id)
+                          if (confirm(t('providersPage.deleteConfirm', { name: p.name }))) deleteProvider.mutate(p.id)
                         }}
                         className="text-xs text-brand-red hover:underline"
                       >
-                        Eliminar
+                        {t('providersPage.delete')}
                       </button>
                     </td>
                   </tr>
                 ))}
               {(providers ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-brand-gray">Todavía no hay proveedores cargados.</td>
+                  <td colSpan={6} className="px-4 py-6 text-center text-brand-gray">{t('providersPage.noProviders')}</td>
                 </tr>
               )}
             </tbody>
@@ -176,17 +176,17 @@ export default function ProvidersPage() {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Nombre del proveedor…"
+            placeholder={t('providersPage.namePlaceholder')}
             className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border border-brand-line"
           />
           <input
             value={cuit}
             onChange={(e) => setCuit(e.target.value)}
-            placeholder="CUIT (opcional)"
+            placeholder={t('providersPage.cuitPlaceholder')}
             className="w-40 text-sm px-3 py-1.5 rounded-md border border-brand-line"
           />
           <button type="submit" className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white">
-            + Proveedor
+            {t('providersPage.submit')}
           </button>
         </form>
       </main>
@@ -203,6 +203,7 @@ function ProviderProjectsPicker({
   assignedProjectIds: Set<string>
   onToggle: (projectId: string, checked: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const assigned = projects.filter((pr) => assignedProjectIds.has(pr.id))
@@ -223,7 +224,7 @@ function ProviderProjectsPicker({
         onClick={() => setOpen((v) => !v)}
         className="flex flex-wrap items-center gap-1 max-w-[220px] text-left"
       >
-        {assigned.length === 0 && <span className="text-xs text-brand-gray hover:text-brand-carbon">Sin asignar</span>}
+        {assigned.length === 0 && <span className="text-xs text-brand-gray hover:text-brand-carbon">{t('providersPage.noAssigned')}</span>}
         {assigned.map((pr) => (
           <span
             key={pr.id}
@@ -235,7 +236,7 @@ function ProviderProjectsPicker({
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 bg-white border border-brand-line rounded-lg shadow-lg py-1.5 min-w-[220px] max-h-64 overflow-y-auto z-20">
-          {projects.length === 0 && <p className="px-3 py-2 text-xs text-brand-gray">No hay proyectos creados.</p>}
+          {projects.length === 0 && <p className="px-3 py-2 text-xs text-brand-gray">{t('providersPage.noProjectsCreated')}</p>}
           {projects.map((pr) => (
             <label
               key={pr.id}

@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
 
 export default function SetPassword() {
+  const { t } = useTranslation()
   const { updatePassword } = useAuth()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -14,11 +16,11 @@ export default function SetPassword() {
     setError(null)
 
     if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.')
+      setError(t('setPassword.errors.tooShort'))
       return
     }
     if (password !== confirm) {
-      setError('Las contraseñas no coinciden.')
+      setError(t('setPassword.errors.mismatch'))
       return
     }
 
@@ -36,12 +38,12 @@ export default function SetPassword() {
       >
         <div className="space-y-1">
           <BrandMark className="h-8 w-8 mb-2" />
-          <h1 className="text-xl font-semibold font-display text-brand-carbon">Elegí tu contraseña</h1>
-          <p className="text-sm text-brand-gray">La vas a usar para volver a entrar la próxima vez.</p>
+          <h1 className="text-xl font-semibold font-display text-brand-carbon">{t('setPassword.title')}</h1>
+          <p className="text-sm text-brand-gray">{t('setPassword.subtitle')}</p>
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm font-medium text-brand-carbon">Contraseña nueva</label>
+          <label className="block text-sm font-medium text-brand-carbon">{t('setPassword.newPassword')}</label>
           <input
             type="password"
             required
@@ -53,7 +55,7 @@ export default function SetPassword() {
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm font-medium text-brand-carbon">Repetir contraseña</label>
+          <label className="block text-sm font-medium text-brand-carbon">{t('setPassword.repeatPassword')}</label>
           <input
             type="password"
             required
@@ -71,7 +73,7 @@ export default function SetPassword() {
           disabled={submitting}
           className="w-full rounded-md bg-brand-orange text-white text-sm font-semibold py-2 hover:opacity-90 disabled:opacity-50"
         >
-          {submitting ? 'Guardando…' : 'Guardar contraseña'}
+          {submitting ? t('setPassword.saving') : t('setPassword.save')}
         </button>
       </form>
     </div>

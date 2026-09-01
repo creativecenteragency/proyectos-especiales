@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { money } from '../lib/taskHelpers'
 import type { Axis, Client, Project, RoadmapItem } from '../types/database'
 
 export default function ProjectProposal() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const { profile, session } = useAuth()
   const queryClient = useQueryClient()
@@ -54,7 +56,7 @@ export default function ProjectProposal() {
       const { error } = await supabase.from('roadmap_items').insert({
         project_id: data.project.id,
         quarter_label: 'Q_ · ',
-        title: 'Nuevo trimestre',
+        title: t('projectProposal.newQuarterDefaultTitle'),
         period_label: '',
         bullets: [],
         sort_order: data.roadmap.length + 1,
@@ -80,8 +82,8 @@ export default function ProjectProposal() {
     onSuccess: invalidate,
   })
 
-  if (isLoading || !data) return <div className="min-h-screen flex items-center justify-center text-brand-gray">Cargando…</div>
-  if (error) return <div className="min-h-screen flex items-center justify-center text-brand-red">No se pudo cargar la propuesta.</div>
+  if (isLoading || !data) return <div className="min-h-screen flex items-center justify-center text-brand-gray">{t('common.loading')}</div>
+  if (error) return <div className="min-h-screen flex items-center justify-center text-brand-red">{t('projectProposal.loadError')}</div>
 
   const { project, axes, roadmap } = data
   const isMaster = !!profile?.is_master
@@ -91,7 +93,7 @@ export default function ProjectProposal() {
     <div className="min-h-screen bg-brand-cream">
       <header className="bg-brand-carbon text-white">
         <div className="max-w-4xl mx-auto px-6 py-8">
-          <Link to={`/proyecto/${project.slug}`} className="text-xs text-white/60 hover:text-white">← Volver al proyecto</Link>
+          <Link to={`/proyecto/${project.slug}`} className="text-xs text-white/60 hover:text-white">{t('projectProposal.backToProject')}</Link>
           <div className="flex items-center gap-2 mt-3 mb-1">
             <span
               className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full"
@@ -99,35 +101,33 @@ export default function ProjectProposal() {
             >
               {project.clients?.name}
             </span>
-            <span className="text-[10px] uppercase tracking-wider text-white/50">Propuesta original</span>
+            <span className="text-[10px] uppercase tracking-wider text-white/50">{t('projectProposal.badge')}</span>
           </div>
           <h1 className="text-3xl font-display font-semibold mb-2">{project.name}</h1>
-          <p className="text-sm text-white/70 max-w-2xl">
-            Lo aprobado al inicio — la guía de referencia del proyecto, aparte del día a día de la ejecución.
-          </p>
+          <p className="text-sm text-white/70 max-w-2xl">{t('projectProposal.subtitle')}</p>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
         <EditableSection
-          title="La idea"
+          title={t('projectProposal.ideaTitle')}
           value={project.proposal_summary}
-          placeholder="La idea grande del proyecto en un par de frases — el porqué, no el cómo. Ej: “Argentinizar Oxford sin cambiar su identidad, mostrando la marca en hogares y rutinas reconocibles.”"
+          placeholder={t('projectProposal.ideaPlaceholder')}
           canEdit={isMaster}
           large
           onSave={(v) => updateProject.mutate({ proposal_summary: v })}
         />
 
         <EditableSection
-          title="Objetivos y estrategia"
+          title={t('projectProposal.objectivesTitle')}
           value={project.proposal_objectives}
-          placeholder="Objetivos concretos, ejes de trabajo, público, y cualquier lineamiento que se aprobó al arrancar."
+          placeholder={t('projectProposal.objectivesPlaceholder')}
           canEdit={isMaster}
           onSave={(v) => updateProject.mutate({ proposal_objectives: v })}
         />
 
         <section className="bg-white border border-brand-line rounded-xl p-5">
-          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-3">Presupuesto aprobado</h2>
+          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-3">{t('projectProposal.budgetTitle')}</h2>
           <div className="text-2xl font-display font-semibold text-brand-carbon mb-4">
             {project.currency} {money(Number(project.total_budget))}
           </div>
@@ -143,11 +143,11 @@ export default function ProjectProposal() {
               )
             })}
           </div>
-          {axes.length === 0 && <p className="text-sm text-brand-gray">Todavía no hay ejes definidos en el proyecto.</p>}
+          {axes.length === 0 && <p className="text-sm text-brand-gray">{t('projectProposal.noAxesYet')}</p>}
         </section>
 
         <section>
-          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-3">Roadmap anual</h2>
+          <h2 className="text-sm font-display font-semibold text-brand-carbon mb-3">{t('projectProposal.roadmapTitle')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {roadmap.map((item) => (
               <RoadmapCard
@@ -156,18 +156,18 @@ export default function ProjectProposal() {
                 canEdit={isMaster}
                 onSave={(patch) => updateRoadmapItem.mutate({ id: item.id, patch })}
                 onDelete={() => {
-                  if (confirm(`¿Eliminar "${item.title}" del roadmap?`)) deleteRoadmapItem.mutate(item.id)
+                  if (confirm(t('projectProposal.deleteConfirm', { title: item.title }))) deleteRoadmapItem.mutate(item.id)
                 }}
               />
             ))}
           </div>
-          {roadmap.length === 0 && <p className="text-sm text-brand-gray mb-3">Todavía no hay roadmap cargado.</p>}
+          {roadmap.length === 0 && <p className="text-sm text-brand-gray mb-3">{t('projectProposal.noRoadmapYet')}</p>}
           {isMaster && (
             <button
               onClick={() => addRoadmapItem.mutate()}
               className="mt-3 text-sm font-semibold px-3 py-1.5 rounded-md border border-dashed border-brand-line text-brand-gray hover:text-brand-carbon hover:border-brand-carbon"
             >
-              + Agregar trimestre
+              {t('projectProposal.addQuarter')}
             </button>
           )}
         </section>
@@ -191,6 +191,7 @@ function EditableSection({
   large?: boolean
   onSave: (value: string) => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
 
@@ -206,7 +207,7 @@ function EditableSection({
             }}
             className="text-xs font-semibold text-brand-orange hover:underline"
           >
-            {value ? 'Editar' : '+ Completar'}
+            {value ? t('projectProposal.edit') : t('projectProposal.complete')}
           </button>
         )}
       </div>
@@ -228,10 +229,10 @@ function EditableSection({
               }}
               className="text-xs font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white"
             >
-              Guardar
+              {t('projectProposal.save')}
             </button>
             <button onClick={() => setEditing(false)} className="text-xs text-brand-gray">
-              Cancelar
+              {t('projectProposal.cancel')}
             </button>
           </div>
         </div>
@@ -240,7 +241,7 @@ function EditableSection({
           {value}
         </p>
       ) : (
-        <p className="text-sm text-brand-gray italic">{canEdit ? placeholder : 'Todavía no se cargó.'}</p>
+        <p className="text-sm text-brand-gray italic">{canEdit ? placeholder : t('projectProposal.notLoadedYet')}</p>
       )}
     </section>
   )
@@ -257,6 +258,7 @@ function RoadmapCard({
   onSave: (patch: Partial<RoadmapItem>) => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [quarterLabel, setQuarterLabel] = useState(item.quarter_label)
   const [title, setTitle] = useState(item.title)
@@ -269,25 +271,25 @@ function RoadmapCard({
         <input
           value={quarterLabel}
           onChange={(e) => setQuarterLabel(e.target.value)}
-          placeholder="Q1 · Ago-Oct 2026"
+          placeholder={t('projectProposal.quarterLabelPlaceholder')}
           className="w-full text-[10px] uppercase tracking-wider font-bold text-brand-orange border border-brand-line rounded px-2 py-1"
         />
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Título del trimestre"
+          placeholder={t('projectProposal.quarterTitlePlaceholder')}
           className="w-full text-sm font-semibold border border-brand-line rounded px-2 py-1"
         />
         <input
           value={periodLabel}
           onChange={(e) => setPeriodLabel(e.target.value)}
-          placeholder="Invierno → Primavera"
+          placeholder={t('projectProposal.periodPlaceholder')}
           className="w-full text-xs text-brand-gray border border-brand-line rounded px-2 py-1"
         />
         <textarea
           value={bulletsText}
           onChange={(e) => setBulletsText(e.target.value)}
-          placeholder="Un punto por línea…"
+          placeholder={t('projectProposal.bulletsPlaceholder')}
           className="w-full text-xs border border-brand-line rounded px-2 py-1 min-h-[80px]"
         />
         <div className="flex gap-2">
@@ -303,9 +305,9 @@ function RoadmapCard({
             }}
             className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white"
           >
-            Guardar
+            {t('projectProposal.save')}
           </button>
-          <button onClick={() => setEditing(false)} className="text-xs text-brand-gray">Cancelar</button>
+          <button onClick={() => setEditing(false)} className="text-xs text-brand-gray">{t('projectProposal.cancel')}</button>
         </div>
       </div>
     )
@@ -315,8 +317,8 @@ function RoadmapCard({
     <div className="bg-white border border-brand-line rounded-lg p-4 relative">
       {canEdit && (
         <div className="absolute top-2 right-2 flex gap-1">
-          <button onClick={() => setEditing(true)} title="Editar" className="h-5 w-5 rounded-full bg-brand-carbon text-white text-[11px] flex items-center justify-center">✎</button>
-          <button onClick={onDelete} title="Eliminar" className="h-5 w-5 rounded-full bg-brand-carbon text-white text-[11px] flex items-center justify-center">×</button>
+          <button onClick={() => setEditing(true)} title={t('common.rename')} className="h-5 w-5 rounded-full bg-brand-carbon text-white text-[11px] flex items-center justify-center">✎</button>
+          <button onClick={onDelete} title={t('common.delete')} className="h-5 w-5 rounded-full bg-brand-carbon text-white text-[11px] flex items-center justify-center">×</button>
         </div>
       )}
       <div className="text-[10px] uppercase tracking-wider font-bold text-brand-orange mb-1">{item.quarter_label}</div>

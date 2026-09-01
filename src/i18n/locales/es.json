@@ -207,6 +207,166 @@
     "remove": "Quitar",
     "errorUpload": "No se pudo subir el logo."
   },
+  "setPassword": {
+    "title": "Elegí tu contraseña",
+    "subtitle": "La vas a usar para volver a entrar la próxima vez.",
+    "newPassword": "Contraseña nueva",
+    "repeatPassword": "Repetir contraseña",
+    "save": "Guardar contraseña",
+    "saving": "Guardando…",
+    "errors": {
+      "tooShort": "La contraseña debe tener al menos 8 caracteres.",
+      "mismatch": "Las contraseñas no coinciden."
+    }
+  },
+  "providersPage": {
+    "title": "Proveedores",
+    "backToProjects": "← Proyectos",
+    "subtitle": "Vista directiva, transversal a todos los proyectos: % de la inversión total ejecutada que se llevó cada proveedor.",
+    "loading": "Cargando…",
+    "table": {
+      "provider": "Proveedor",
+      "cuit": "CUIT",
+      "projects": "Proyectos",
+      "invested": "Invertido",
+      "pctTotal": "% del total"
+    },
+    "noAssigned": "Sin asignar",
+    "noProjectsCreated": "No hay proyectos creados.",
+    "noProviders": "Todavía no hay proveedores cargados.",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar proveedor \"{{name}}\"?",
+    "namePlaceholder": "Nombre del proveedor…",
+    "cuitPlaceholder": "CUIT (opcional)",
+    "submit": "+ Proveedor"
+  },
+  "conexiones": {
+    "title": "Conexiones",
+    "backToProjects": "← Proyectos",
+    "subtitle": "API keys de los agregadores que alimentan \"Marca en Acción\". Solo vos las ves y las podés cambiar — se usan del lado del servidor, nunca se muestran a Equipo ni Auditor.",
+    "loading": "Cargando…",
+    "configured": "Configurada",
+    "notConfigured": "No configurada",
+    "updated": "Actualizada {{date}}",
+    "changeKey": "Cambiar key",
+    "remove": "Quitar",
+    "removeConfirm": "¿Quitar la API key de {{label}}? \"Marca en Acción\" dejará de traer datos de esta fuente.",
+    "apiKeyPlaceholder": "API key de {{label}}…",
+    "hide": "ocultar",
+    "show": "ver",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "aggregators": {
+      "windsorDescription": "Meta Ads, Google Ads e Instagram Insights.",
+      "mastermetricsDescription": "Tiendanube y Google Analytics.",
+      "metricoolDescription": "Redes orgánicas."
+    }
+  },
+  "marcaEnAccion": {
+    "backToProject": "← Volver al proyecto",
+    "title": "Marca en Acción",
+    "subtitle": "Datos reales de campañas y redes, sincronizados vía Windsor / MasterMetrics / Metricool. Solo visible para la agencia y el Owner.",
+    "loading": "Cargando…",
+    "connectionsTitle": "Conexiones de este proyecto",
+    "account": "cuenta: {{ref}}",
+    "sync": "Sincronizar (30d)",
+    "pendingConfig": "Conexión pendiente de configurar",
+    "remove": "Quitar",
+    "removeConfirm": "¿Quitar la conexión \"{{label}}\"?",
+    "error": "Error: {{message}}",
+    "syncing": "Sincronizando…",
+    "noResponse": "Sin respuesta",
+    "notMatchedAccount": "No se encontró una cuenta que coincida con \"{{ref}}\" — mostrando todas las cuentas conectadas.",
+    "poweredBy": "↳ potenciada por: {{tasks}}",
+    "table": {
+      "campaign": "Campaña",
+      "spend": "Gasto",
+      "clicks": "Clics"
+    },
+    "noConnections": "Todavía no hay conexiones configuradas para este proyecto.",
+    "form": {
+      "labelPlaceholder": "Nombre para identificarla…",
+      "accountPlaceholder": "Cuenta (nombre o ID, ej: Oxford - Argentina)",
+      "submit": "+ Conexión"
+    },
+    "howToLinkTitle": "Cómo vincular una tarea a una campaña",
+    "howToLinkBody": "Desde el proyecto, abrí cualquier tarea y completá \"Campaña / posteo vinculado\" con el nombre de la campaña real (o el link del posteo). Cuando sincronices acá, si el nombre coincide, la vas a ver marcada como \"potenciada por\" esa tarea.",
+    "providerLabel": {
+      "facebook": "Meta Ads (Windsor)",
+      "google_ads": "Google Ads (Windsor)",
+      "instagram": "Instagram orgánico (Windsor)",
+      "google_analytics": "Google Analytics (MasterMetrics)",
+      "tiendanube": "Tiendanube (MasterMetrics)",
+      "metricool_organic": "Redes orgánicas (Metricool)"
+    },
+    "errorLabel": {
+      "windsor_not_configured": "Falta configurar la API key de Windsor (WINDSOR_API_KEY) en los secretos del proyecto de Supabase.",
+      "forbidden": "No tenés permiso para ver esta conexión.",
+      "integration_not_found": "Esta conexión ya no existe.",
+      "windsor_request_failed": "Windsor no pudo responder la consulta. Revisá la API key o intentá de nuevo.",
+      "provider_not_supported_yet": "Esta fuente todavía no está conectada."
+    }
+  },
+  "projectProposal": {
+    "backToProject": "← Volver al proyecto",
+    "badge": "Propuesta original",
+    "subtitle": "Lo aprobado al inicio — la guía de referencia del proyecto, aparte del día a día de la ejecución.",
+    "loadError": "No se pudo cargar la propuesta.",
+    "ideaTitle": "La idea",
+    "ideaPlaceholder": "La idea grande del proyecto en un par de frases — el porqué, no el cómo. Ej: “Argentinizar Oxford sin cambiar su identidad, mostrando la marca en hogares y rutinas reconocibles.”",
+    "objectivesTitle": "Objetivos y estrategia",
+    "objectivesPlaceholder": "Objetivos concretos, ejes de trabajo, público, y cualquier lineamiento que se aprobó al arrancar.",
+    "edit": "Editar",
+    "complete": "+ Completar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "notLoadedYet": "Todavía no se cargó.",
+    "budgetTitle": "Presupuesto aprobado",
+    "noAxesYet": "Todavía no hay ejes definidos en el proyecto.",
+    "roadmapTitle": "Roadmap anual",
+    "noRoadmapYet": "Todavía no hay roadmap cargado.",
+    "addQuarter": "+ Agregar trimestre",
+    "newQuarterDefaultTitle": "Nuevo trimestre",
+    "quarterLabelPlaceholder": "Q1 · Ago-Oct 2026",
+    "quarterTitlePlaceholder": "Título del trimestre",
+    "periodPlaceholder": "Invierno → Primavera",
+    "bulletsPlaceholder": "Un punto por línea…",
+    "deleteConfirm": "¿Eliminar \"{{title}}\" del roadmap?"
+  },
+  "reportPrint": {
+    "loading": "Cargando informe…",
+    "backToProject": "← Volver al proyecto",
+    "includeLabel": "Qué incluir:",
+    "financialSummaryToggle": "Resumen financiero",
+    "axesToggle": "Ejes de presupuesto",
+    "tasksToggle": "Tareas por lista/grupo",
+    "downloadPrint": "Descargar / Imprimir PDF",
+    "reportSubtitle": "{{client}} · Informe de proyecto",
+    "issuedOn": "Emitido {{date}}",
+    "financial": {
+      "title": "Resumen financiero",
+      "total": "Presupuesto total",
+      "planned": "Proyectado (comprometido)",
+      "actual": "Ejecutado",
+      "balance": "Saldo",
+      "projectedClose": "Proyección de cierre"
+    },
+    "axesTitle": "Ejes de presupuesto",
+    "axesTable": {
+      "axis": "Eje",
+      "budget": "Presupuesto",
+      "planned": "Proyectado",
+      "actual": "Ejecutado",
+      "balance": "Saldo"
+    },
+    "tasksTable": {
+      "task": "Tarea",
+      "status": "Estado",
+      "provider": "Proveedor",
+      "planned": "Proyectado",
+      "actual": "Ejecutado"
+    }
+  },
   "login": {
     "title": "Proyectos Especiales",
     "subtitle": "Iniciá sesión para ver tus proyectos.",

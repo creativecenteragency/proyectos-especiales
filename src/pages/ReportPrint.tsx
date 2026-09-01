@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { STATUS_LABEL, money, projectedClose } from '../lib/taskHelpers'
+import { money, projectedClose } from '../lib/taskHelpers'
 import BrandMark from '../components/BrandMark'
 import type { Axis, Client, Group, List, Project, Provider, Task } from '../types/database'
 
 type Sections = { financial: boolean; axes: boolean; tasks: boolean }
 
 export default function ReportPrint() {
+  const { t, i18n } = useTranslation()
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
   const { slug } = useParams<{ slug: string }>()
   const { session } = useAuth()
   const [sections, setSections] = useState<Sections>({ financial: true, axes: true, tasks: true })
@@ -52,7 +55,7 @@ export default function ReportPrint() {
     enabled: !!slug && !!session,
   })
 
-  if (isLoading || !data) return <div className="p-10 text-brand-gray">Cargando informe…</div>
+  if (isLoading || !data) return <div className="p-10 text-brand-gray">{t('reportPrint.loading')}</div>
 
   const { project, axes, lists, groups, tasks, providers } = data
   const plannedTotal = tasks.reduce((s, t) => s + Number(t.planned_amount), 0)
@@ -63,27 +66,31 @@ export default function ReportPrint() {
     <div className="min-h-screen bg-white text-brand-carbon">
       <div className="max-w-4xl mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-4 print:hidden">
-          <Link to={`/proyecto/${project.slug}`} className="text-sm text-brand-gray hover:text-brand-carbon">← Volver al proyecto</Link>
+          <Link to={`/proyecto/${project.slug}`} className="text-sm text-brand-gray hover:text-brand-carbon">{t('reportPrint.backToProject')}</Link>
         </div>
 
         <div className="print:hidden bg-brand-cream border border-brand-line rounded-xl p-4 mb-6 flex flex-wrap items-center gap-4">
-          <span className="text-xs font-semibold text-brand-carbon uppercase tracking-wider">Qué incluir:</span>
-          <SectionToggle label="Resumen financiero" checked={sections.financial} onChange={(v) => setSections((s) => ({ ...s, financial: v }))} />
-          <SectionToggle label="Ejes de presupuesto" checked={sections.axes} onChange={(v) => setSections((s) => ({ ...s, axes: v }))} />
-          <SectionToggle label="Tareas por lista/grupo" checked={sections.tasks} onChange={(v) => setSections((s) => ({ ...s, tasks: v }))} />
+          <span className="text-xs font-semibold text-brand-carbon uppercase tracking-wider">{t('reportPrint.includeLabel')}</span>
+          <SectionToggle label={t('reportPrint.financialSummaryToggle')} checked={sections.financial} onChange={(v) => setSections((s) => ({ ...s, financial: v }))} />
+          <SectionToggle label={t('reportPrint.axesToggle')} checked={sections.axes} onChange={(v) => setSections((s) => ({ ...s, axes: v }))} />
+          <SectionToggle label={t('reportPrint.tasksToggle')} checked={sections.tasks} onChange={(v) => setSections((s) => ({ ...s, tasks: v }))} />
           <button
             onClick={() => window.print()}
             className="ml-auto text-sm font-semibold px-4 py-2 rounded-md bg-brand-orange text-white"
           >
-            Descargar / Imprimir PDF
+            {t('reportPrint.downloadPrint')}
           </button>
         </div>
 
         <div className="flex items-start justify-between border-b-2 border-brand-carbon pb-4 mb-6">
           <div>
-            <div className="text-xs uppercase tracking-wider text-brand-gray">{project.clients?.name} · Informe de proyecto</div>
+            <div className="text-xs uppercase tracking-wider text-brand-gray">
+              {t('reportPrint.reportSubtitle', { client: project.clients?.name })}
+            </div>
             <h1 className="text-2xl font-display font-semibold">{project.name}</h1>
-            <p className="text-sm text-brand-gray mt-1">Emitido {new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            <p className="text-sm text-brand-gray mt-1">
+              {t('reportPrint.issuedOn', { date: new Date().toLocaleDateString(dateLocale, { day: '2-digit', month: 'long', year: 'numeric' }) })}
+            </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {project.clients?.logo_url && <img src={project.clients.logo_url} alt={project.clients.name} className="h-10 max-w-[140px] object-contain" />}
@@ -93,15 +100,15 @@ export default function ReportPrint() {
 
         {sections.financial && (
           <section className="mb-8">
-            <h2 className="text-sm font-display font-semibold uppercase tracking-wider mb-2">Resumen financiero</h2>
+            <h2 className="text-sm font-display font-semibold uppercase tracking-wider mb-2">{t('reportPrint.financial.title')}</h2>
             <table className="w-full text-sm border-collapse">
               <tbody>
-                <Row label="Presupuesto total" value={`${project.currency} ${money(Number(project.total_budget))}`} />
-                <Row label="Proyectado (comprometido)" value={`${project.currency} ${money(plannedTotal)}`} />
-                <Row label="Ejecutado" value={`${project.currency} ${money(actualTotal)}`} />
-                <Row label="Saldo" value={`${project.currency} ${money(Number(project.total_budget) - actualTotal)}`} />
+                <Row label={t('reportPrint.financial.total')} value={`${project.currency} ${money(Number(project.total_budget))}`} />
+                <Row label={t('reportPrint.financial.planned')} value={`${project.currency} ${money(plannedTotal)}`} />
+                <Row label={t('reportPrint.financial.actual')} value={`${project.currency} ${money(actualTotal)}`} />
+                <Row label={t('reportPrint.financial.balance')} value={`${project.currency} ${money(Number(project.total_budget) - actualTotal)}`} />
                 <Row
-                  label="Proyección de cierre"
+                  label={t('reportPrint.financial.projectedClose')}
                   value={`${project.currency} ${money(projectedTotal)}`}
                   warn={projectedTotal > Number(project.total_budget)}
                 />
@@ -112,15 +119,15 @@ export default function ReportPrint() {
 
         {sections.axes && (
           <section className="mb-8">
-            <h2 className="text-sm font-display font-semibold uppercase tracking-wider mb-2">Ejes de presupuesto</h2>
+            <h2 className="text-sm font-display font-semibold uppercase tracking-wider mb-2">{t('reportPrint.axesTitle')}</h2>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-brand-carbon text-left">
-                  <th className="py-1.5 pr-2 font-semibold">Eje</th>
-                  <th className="py-1.5 pr-2 font-semibold text-right">Presupuesto</th>
-                  <th className="py-1.5 pr-2 font-semibold text-right">Proyectado</th>
-                  <th className="py-1.5 pr-2 font-semibold text-right">Ejecutado</th>
-                  <th className="py-1.5 font-semibold text-right">Saldo</th>
+                  <th className="py-1.5 pr-2 font-semibold">{t('reportPrint.axesTable.axis')}</th>
+                  <th className="py-1.5 pr-2 font-semibold text-right">{t('reportPrint.axesTable.budget')}</th>
+                  <th className="py-1.5 pr-2 font-semibold text-right">{t('reportPrint.axesTable.planned')}</th>
+                  <th className="py-1.5 pr-2 font-semibold text-right">{t('reportPrint.axesTable.actual')}</th>
+                  <th className="py-1.5 font-semibold text-right">{t('reportPrint.axesTable.balance')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,11 +165,11 @@ export default function ReportPrint() {
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="border-b border-brand-line text-left text-brand-gray">
-                        <th className="py-1 pr-2 font-medium">Tarea</th>
-                        <th className="py-1 pr-2 font-medium">Estado</th>
-                        <th className="py-1 pr-2 font-medium">Proveedor</th>
-                        <th className="py-1 pr-2 font-medium text-right">Proyectado</th>
-                        <th className="py-1 font-medium text-right">Ejecutado</th>
+                        <th className="py-1 pr-2 font-medium">{t('reportPrint.tasksTable.task')}</th>
+                        <th className="py-1 pr-2 font-medium">{t('reportPrint.tasksTable.status')}</th>
+                        <th className="py-1 pr-2 font-medium">{t('reportPrint.tasksTable.provider')}</th>
+                        <th className="py-1 pr-2 font-medium text-right">{t('reportPrint.tasksTable.planned')}</th>
+                        <th className="py-1 font-medium text-right">{t('reportPrint.tasksTable.actual')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -171,7 +178,7 @@ export default function ReportPrint() {
                         return (
                           <tr key={task.id} className="border-b border-brand-line">
                             <td className="py-1 pr-2">{task.title}</td>
-                            <td className="py-1 pr-2">{STATUS_LABEL[task.status]}</td>
+                            <td className="py-1 pr-2">{t(`common.status.${task.status}`)}</td>
                             <td className="py-1 pr-2">{provider?.name ?? '—'}</td>
                             <td className="py-1 pr-2 text-right">{money(Number(task.planned_amount))}</td>
                             <td className="py-1 text-right">{money(Number(task.actual_amount))}</td>
