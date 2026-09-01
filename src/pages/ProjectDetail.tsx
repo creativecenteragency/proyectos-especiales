@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { STATUS_LABEL, STATUS_COLOR, money, projectedClose } from '../lib/taskHelpers'
@@ -8,6 +9,7 @@ import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import BrandMark from '../components/BrandMark'
 import ClientLogoEditor from '../components/ClientLogoEditor'
 import ProjectMembersPanel from '../components/ProjectMembersPanel'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import Dropdown, { DropdownItem, DropdownLink } from '../components/Dropdown'
 import type { Axis, AxisChangeLog, Client, Group, List, Project, Provider, Task, TaskDependency, TaskStatus } from '../types/database'
 
@@ -28,6 +30,7 @@ type BoardDraft = Record<string, string[]> // group_id -> ids ordenados ("new:<u
 type PendingDuplicate = { source: Task; targetGroupId: string }
 
 export default function ProjectDetail() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const { profile, session } = useAuth()
   const queryClient = useQueryClient()
@@ -190,7 +193,7 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
-    onError: (err: unknown) => alert(`No se pudo crear la tarea: ${err instanceof Error ? err.message : String(err)}`),
+    onError: (err: unknown) => alert(t('projectDetail.taskCreateError', { error: err instanceof Error ? err.message : String(err) })),
   })
 
   const updateTask = useMutation({
@@ -199,7 +202,7 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
-    onError: (err: unknown) => alert(`No se pudo guardar el cambio: ${err instanceof Error ? err.message : String(err)}`),
+    onError: (err: unknown) => alert(t('projectDetail.taskUpdateError', { error: err instanceof Error ? err.message : String(err) })),
   })
 
   const deleteTask = useMutation({
@@ -208,7 +211,7 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
-    onError: (err: unknown) => alert(`No se pudo eliminar la tarea: ${err instanceof Error ? err.message : String(err)}`),
+    onError: (err: unknown) => alert(t('projectDetail.taskDeleteError', { error: err instanceof Error ? err.message : String(err) })),
   })
 
   const commitBoard = useMutation({
@@ -245,7 +248,7 @@ export default function ProjectDetail() {
             axis_id: source.axis_id,
             provider_id: source.provider_id,
             campaign_ref: source.campaign_ref,
-            title: `${source.title} (copia)`,
+            title: `${source.title}${t('projectDetail.copySuffix')}`,
             description: source.description,
             status: 'preparacion',
             tags: source.tags,
@@ -267,7 +270,7 @@ export default function ProjectDetail() {
       setPendingDuplicates({})
       invalidate()
     },
-    onError: (err: unknown) => alert(`No se pudieron guardar los cambios: ${err instanceof Error ? err.message : String(err)}`),
+    onError: (err: unknown) => alert(t('projectDetail.boardSaveError', { error: err instanceof Error ? err.message : String(err) })),
   })
 
   const addDependency = useMutation({
@@ -276,7 +279,7 @@ export default function ProjectDetail() {
       if (error) throw error
     },
     onSuccess: invalidate,
-    onError: (err: unknown) => alert(`No se pudo vincular la tarea: ${err instanceof Error ? err.message : String(err)}`),
+    onError: (err: unknown) => alert(t('projectDetail.dependencyLinkError', { error: err instanceof Error ? err.message : String(err) })),
   })
 
   const removeDependency = useMutation({
@@ -350,7 +353,7 @@ export default function ProjectDetail() {
             action: 'updated',
             before: { total_budget: data.project.total_budget },
             after: { total_budget: newTotal },
-            reason: `Ajuste de presupuesto total: ${reason}`,
+            reason: t('projectDetail.axisEditor.totalAdjustReason', { reason }),
             user_id: session!.user.id,
           })
         }
@@ -389,8 +392,8 @@ export default function ProjectDetail() {
     onSuccess: invalidateProviders,
   })
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-brand-gray">Cargando…</div>
-  if (error || !data) return <div className="min-h-screen flex items-center justify-center text-brand-red">No se pudo cargar el proyecto.</div>
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-brand-gray">{t('common.loading')}</div>
+  if (error || !data) return <div className="min-h-screen flex items-center justify-center text-brand-red">{t('projectDetail.loadError')}</div>
 
   const { project, axes, tasks } = data
   const plannedTotal = tasks.reduce((sum, t) => sum + Number(t.planned_amount), 0)
@@ -466,29 +469,30 @@ export default function ProjectDetail() {
       <header className="bg-brand-carbon text-white">
         <div className="max-w-6xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-xs text-white/60 hover:text-white">← Proyectos</Link>
+            <Link to="/" className="text-xs text-white/60 hover:text-white">{t('projectDetail.backToProjects')}</Link>
             <div className="flex items-center gap-4">
+              <LanguageSwitcher className="border-white/20 text-white/80" />
               {(isMaster || canEdit) && (
-                <Dropdown trigger={<span className="text-xs text-white/60 hover:text-white">Ajustes ▾</span>}>
+                <Dropdown trigger={<span className="text-xs text-white/60 hover:text-white">{t('projectDetail.settings')} ▾</span>}>
                   {isMaster && (
-                    <DropdownItem onClick={() => setShowLogoEditor((v) => !v)}>Logo del cliente</DropdownItem>
+                    <DropdownItem onClick={() => setShowLogoEditor((v) => !v)}>{t('projectDetail.clientLogo')}</DropdownItem>
                   )}
                   {isMaster && (
-                    <DropdownItem onClick={() => setShowMembers((v) => !v)}>Miembros del proyecto</DropdownItem>
+                    <DropdownItem onClick={() => setShowMembers((v) => !v)}>{t('projectDetail.projectMembers')}</DropdownItem>
                   )}
                   {canEdit && (
                     <DropdownLink to={`/proyecto/${project.slug}/marca-en-accion`}>
-                      Marca en Acción
+                      {t('projectDetail.brandInAction')}
                       <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange">BETA</span>
                     </DropdownLink>
                   )}
                 </Dropdown>
               )}
               <Link to={`/proyecto/${project.slug}/propuesta`} className="text-xs text-white/60 hover:text-white">
-                Propuesta original
+                {t('projectDetail.originalProposal')}
               </Link>
               <Link to={`/proyecto/${project.slug}/informe`} className="text-xs text-white/60 hover:text-white">
-                Informe imprimible →
+                {t('projectDetail.printableReport')}
               </Link>
             </div>
           </div>
@@ -507,7 +511,7 @@ export default function ProjectDetail() {
             >
               {project.clients?.name}
             </span>
-            <span className="text-[10px] uppercase tracking-wider text-white/50">{project.status}</span>
+            <span className="text-[10px] uppercase tracking-wider text-white/50">{t(`common.projectStatus.${project.status}`)}</span>
           </div>
           {isMaster && showLogoEditor && project.clients && (
             <ClientLogoEditor client={project.clients} onSaved={invalidate} />
@@ -516,19 +520,22 @@ export default function ProjectDetail() {
           <p className="text-sm text-white/70 max-w-2xl mb-6">{project.description}</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-white/10 rounded-lg overflow-hidden">
-            <Stat label="Presupuesto total" value={`${project.currency} ${money(Number(project.total_budget))}`} />
-            <Stat label="Proyectado" value={`${project.currency} ${money(plannedTotal)}`} />
-            <Stat label="Ejecutado" value={`${project.currency} ${money(actualTotal)}`} />
-            <Stat label="Saldo" value={`${project.currency} ${money(balance)}`} />
+            <Stat label={t('projectDetail.stats.totalBudget')} value={`${project.currency} ${money(Number(project.total_budget))}`} />
+            <Stat label={t('projectDetail.stats.planned')} value={`${project.currency} ${money(plannedTotal)}`} />
+            <Stat label={t('projectDetail.stats.actual')} value={`${project.currency} ${money(actualTotal)}`} />
+            <Stat label={t('projectDetail.stats.balance')} value={`${project.currency} ${money(balance)}`} />
             <Stat
-              label="Proyección de cierre"
+              label={t('projectDetail.stats.projectedClose')}
               value={`${project.currency} ${money(projectedTotal)}`}
               alert={overBudget}
             />
           </div>
           {overBudget && (
             <p className="text-xs text-red-300 mt-2">
-              ⚠ Si se ejecuta todo lo comprometido, el proyecto cierra {project.currency} {money(projectedTotal - Number(project.total_budget))} por encima del presupuesto.
+              {t('projectDetail.overBudgetWarning', {
+                currency: project.currency,
+                amount: money(projectedTotal - Number(project.total_budget)),
+              })}
             </p>
           )}
         </div>
@@ -543,13 +550,13 @@ export default function ProjectDetail() {
 
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs uppercase tracking-wider text-brand-gray font-semibold">Ejes de presupuesto</h2>
+            <h2 className="text-xs uppercase tracking-wider text-brand-gray font-semibold">{t('projectDetail.axes.title')}</h2>
             {isMaster && (
               <button
                 onClick={() => setShowAxisEditor((v) => !v)}
                 className="text-xs font-semibold text-brand-orange hover:underline"
               >
-                {showAxisEditor ? 'Cerrar editor' : 'Editar ejes'}
+                {showAxisEditor ? t('projectDetail.axes.closeEditor') : t('projectDetail.axes.editAxes')}
               </button>
             )}
           </div>
@@ -575,15 +582,15 @@ export default function ProjectDetail() {
                     <div className="h-full" style={{ width: `${pct}%`, backgroundColor: axis.color }} />
                   </div>
                   <div className="text-[10px] text-brand-gray">
-                    Proyectado {money(axisPlanned)} · Ejecutado {money(axisActual)}
+                    {t('projectDetail.axes.summary', { planned: money(axisPlanned), actual: money(axisActual) })}
                   </div>
                   <div className={`text-[10px] font-semibold mt-0.5 ${axisOver ? 'text-brand-red' : 'text-brand-gray'}`}>
-                    Proyección de cierre {money(axisProjected)} {axisOver && '⚠'}
+                    {t('projectDetail.axes.projectedClose', { amount: money(axisProjected) })} {axisOver && '⚠'}
                   </div>
                 </div>
               )
             })}
-            {axes.length === 0 && <p className="text-sm text-brand-gray col-span-full">Todavía no hay ejes definidos.</p>}
+            {axes.length === 0 && <p className="text-sm text-brand-gray col-span-full">{t('projectDetail.axes.none')}</p>}
           </div>
 
           {isMaster && showAxisEditor && (
@@ -611,18 +618,18 @@ export default function ProjectDetail() {
                 onSelect={() => setActiveListId(l.id)}
                 onRename={(name) => updateList.mutate({ id: l.id, name })}
                 onDelete={() => {
-                  if (confirm(`¿Eliminar la lista "${l.name}" y todo su contenido?`)) deleteList.mutate(l.id)
+                  if (confirm(t('projectDetail.board.deleteListConfirm', { name: l.name }))) deleteList.mutate(l.id)
                 }}
               />
             ))}
-            {canEdit && <AddInline placeholder="Nueva lista…" onSubmit={(name) => addList.mutate(name)} />}
+            {canEdit && <AddInline placeholder={t('projectDetail.board.newList')} onSubmit={(name) => addList.mutate(name)} />}
           </div>
 
           {boardDirty && (
             <div className="sticky top-2 z-30 mb-4 bg-brand-carbon text-white rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow">
               <div className="text-sm">
-                <span className="font-semibold">Tenés cambios sin guardar</span>
-                <span className="text-white/70"> — los movimientos y duplicados no se aplican hasta que guardes.</span>
+                <span className="font-semibold">{t('projectDetail.board.unsaved')}</span>
+                <span className="text-white/70">{t('projectDetail.board.unsavedHint')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -630,14 +637,14 @@ export default function ProjectDetail() {
                   disabled={commitBoard.isPending}
                   className="text-xs font-semibold px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-50"
                 >
-                  Descartar
+                  {t('projectDetail.board.discard')}
                 </button>
                 <button
                   onClick={() => commitBoard.mutate()}
                   disabled={commitBoard.isPending}
                   className="text-xs font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white disabled:opacity-50"
                 >
-                  {commitBoard.isPending ? 'Guardando…' : 'Guardar cambios'}
+                  {commitBoard.isPending ? t('common.saving') : t('common.saveChanges')}
                 </button>
               </div>
             </div>
@@ -651,10 +658,14 @@ export default function ProjectDetail() {
                 return (
                   <div key={tempId} className="text-xs bg-white border border-brand-line rounded-md px-3 py-2 flex items-center justify-between">
                     <span>
-                      Copia de "{pd.source.title}" → {targetList?.name} / {targetGroup?.name}
+                      {t('projectDetail.board.copyOf', {
+                        title: pd.source.title,
+                        list: targetList?.name,
+                        group: targetGroup?.name,
+                      })}
                     </span>
                     <button onClick={() => removePendingDuplicate(tempId)} className="text-brand-gray hover:text-brand-red">
-                      Quitar
+                      {t('common.remove')}
                     </button>
                   </div>
                 )
@@ -662,7 +673,7 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {!list && <p className="text-sm text-brand-gray">Todavía no hay listas en este proyecto.</p>}
+          {!list && <p className="text-sm text-brand-gray">{t('projectDetail.board.noListsYet')}</p>}
 
           {list && (
             <div className="space-y-6">
@@ -696,10 +707,10 @@ export default function ProjectDetail() {
                     <GroupHeader
                       group={group}
                       canEdit={canEdit}
-                      summary={`Proyectado ${money(gPlanned)} · Ejecutado ${money(gActual)}`}
+                      summary={t('projectDetail.axes.summary', { planned: money(gPlanned), actual: money(gActual) })}
                       onRename={(name) => updateGroup.mutate({ id: group.id, name })}
                       onDelete={() => {
-                        if (confirm(`¿Eliminar el grupo "${group.name}" y sus tareas?`)) deleteGroup.mutate(group.id)
+                        if (confirm(t('projectDetail.board.deleteGroupConfirm', { name: group.name }))) deleteGroup.mutate(group.id)
                       }}
                     />
                     <div className="divide-y divide-brand-line">
@@ -734,7 +745,7 @@ export default function ProjectDetail() {
                             onToggle={() => setOpenTaskId(openTaskId === task.id ? null : task.id)}
                             onUpdate={(patch) => updateTask.mutate({ id: task.id, patch })}
                             onDelete={() => {
-                              if (confirm(`¿Eliminar la tarea "${task.title}"?`)) deleteTask.mutate(task.id)
+                              if (confirm(t('projectDetail.board.deleteTaskConfirm', { title: task.title }))) deleteTask.mutate(task.id)
                             }}
                             onAddProvider={(input) => addProvider.mutateAsync(input)}
                             onAddDependency={(dependsOnId) => addDependency.mutate({ taskId: task.id, dependsOnId })}
@@ -754,7 +765,7 @@ export default function ProjectDetail() {
                         ),
                       )}
                       {groupTasks.length === 0 && (
-                        <p className="text-sm text-brand-gray px-5 py-4">Sin tareas todavía.</p>
+                        <p className="text-sm text-brand-gray px-5 py-4">{t('projectDetail.board.noTasksYet')}</p>
                       )}
                       {canEdit && (
                         <div
@@ -776,7 +787,7 @@ export default function ProjectDetail() {
                     )}
                     {canEdit && boardDirty && (
                       <p className="px-5 py-3 bg-brand-cream/50 text-xs text-brand-gray">
-                        Guardá o descartá los cambios pendientes antes de agregar una tarea nueva.
+                        {t('projectDetail.board.blockedByPending')}
                       </p>
                     )}
                   </div>
@@ -784,7 +795,7 @@ export default function ProjectDetail() {
               })}
 
               {canEdit && (
-                <AddInline placeholder="Nuevo grupo…" onSubmit={(name) => addGroup.mutate({ listId: list.id, name })} />
+                <AddInline placeholder={t('projectDetail.board.newGroup')} onSubmit={(name) => addGroup.mutate({ listId: list.id, name })} />
               )}
             </div>
           )}
@@ -818,6 +829,7 @@ function ListTab({
   onRename: (name: string) => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(list.name)
 
@@ -860,8 +872,8 @@ function ListTab({
       </button>
       {canEdit && (
         <span className="absolute -top-2 -right-2 hidden group-hover:flex gap-0.5">
-          <IconButton title="Renombrar" onClick={() => setEditing(true)}>✎</IconButton>
-          <IconButton title="Eliminar" onClick={onDelete}>×</IconButton>
+          <IconButton title={t('common.rename')} onClick={() => setEditing(true)}>✎</IconButton>
+          <IconButton title={t('common.delete')} onClick={onDelete}>×</IconButton>
         </span>
       )}
     </div>
@@ -881,6 +893,7 @@ function GroupHeader({
   onRename: (name: string) => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(group.name)
 
@@ -913,8 +926,8 @@ function GroupHeader({
         <span className="text-xs text-white/70">{summary}</span>
         {canEdit && !editing && (
           <span className="flex gap-1">
-            <IconButton title="Renombrar" onClick={() => setEditing(true)} dark>✎</IconButton>
-            <IconButton title="Eliminar" onClick={onDelete} dark>×</IconButton>
+            <IconButton title={t('common.rename')} onClick={() => setEditing(true)} dark>✎</IconButton>
+            <IconButton title={t('common.delete')} onClick={onDelete} dark>×</IconButton>
           </span>
         )}
       </div>
@@ -948,6 +961,7 @@ function IconButton({
 }
 
 function AddInline({ placeholder, onSubmit }: { placeholder: string; onSubmit: (value: string) => void }) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(false)
 
@@ -981,7 +995,7 @@ function AddInline({ placeholder, onSubmit }: { placeholder: string; onSubmit: (
         className="text-sm px-3 py-1.5 rounded-md border border-brand-line focus:outline-none focus:ring-2 focus:ring-brand-orange/40"
       />
       <button type="submit" className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white">
-        Agregar
+        {t('common.add')}
       </button>
     </form>
   )
@@ -994,6 +1008,7 @@ function AddTaskForm({
   axes: Axis[]
   onSubmit: (input: { title: string; axisId: string | null; planned: number }) => void
 }) {
+  const { t } = useTranslation()
   const [title, setTitle] = useState('')
   const [axisId, setAxisId] = useState<string>('')
   const [planned, setPlanned] = useState('0')
@@ -1011,7 +1026,7 @@ function AddTaskForm({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Título de la tarea…"
+        placeholder={t('projectDetail.taskForm.titlePlaceholder')}
         className="flex-1 min-w-[180px] text-sm px-3 py-1.5 rounded-md border border-brand-line focus:outline-none focus:ring-2 focus:ring-brand-orange/40"
       />
       <select
@@ -1019,7 +1034,7 @@ function AddTaskForm({
         onChange={(e) => setAxisId(e.target.value)}
         className="text-sm px-2 py-1.5 rounded-md border border-brand-line"
       >
-        <option value="">Sin eje</option>
+        <option value="">{t('common.noAxis')}</option>
         {axes.map((a) => (
           <option key={a.id} value={a.id}>{a.name}</option>
         ))}
@@ -1029,10 +1044,10 @@ function AddTaskForm({
         value={planned}
         onChange={(e) => setPlanned(e.target.value)}
         className="w-28 text-sm px-2 py-1.5 rounded-md border border-brand-line"
-        placeholder="Proyectado"
+        placeholder={t('projectDetail.taskForm.plannedPlaceholder')}
       />
       <button type="submit" className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white">
-        + Tarea
+        {t('projectDetail.taskForm.submit')}
       </button>
     </form>
   )
@@ -1059,6 +1074,8 @@ function AxisEditor({
   onSave: (rows: { id: string | null; name: string; color: string; budget: number }[], reason: string, adjustTotal: boolean) => void
   onDelete: (axis: Axis, reason: string) => void
 }) {
+  const { t, i18n } = useTranslation()
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
   const floors = useMemo(() => {
     const map = new Map<string, number>()
     for (const axis of axes) {
@@ -1110,19 +1127,19 @@ function AxisEditor({
 
   function submit(adjustTotal: boolean) {
     if (!reason.trim()) {
-      alert('Contá el motivo del cambio para dejarlo asentado en el historial.')
+      alert(t('projectDetail.axisEditor.alerts.needReason'))
       return
     }
     if (floorErrors.length > 0) {
-      alert('Hay ejes con menos presupuesto del que ya tienen comprometido o ejecutado. Ajustá esos valores primero.')
+      alert(t('projectDetail.axisEditor.alerts.floorError'))
       return
     }
     if (!adjustTotal && !balanced) {
-      alert('La suma de los ejes tiene que ser igual al presupuesto total para redistribuir sin tocarlo.')
+      alert(t('projectDetail.axisEditor.alerts.mustBalance'))
       return
     }
     if (adjustTotal && totalFloorError) {
-      alert('No podés bajar el presupuesto total por debajo de lo que ya se ejecutó en todo el proyecto.')
+      alert(t('projectDetail.axisEditor.alerts.totalFloorError'))
       return
     }
     const payload = rows
@@ -1135,10 +1152,8 @@ function AxisEditor({
   return (
     <div className="bg-white border border-brand-line rounded-xl p-5 mb-4 space-y-4">
       <div>
-        <h3 className="text-sm font-display font-semibold text-brand-carbon">Redistribución de presupuesto</h3>
-        <p className="text-xs text-brand-gray mt-0.5">
-          Cambiá los montos, agregá ejes nuevos, y elegí si ese dinero sale de otros ejes (redistribuir) o se suma al total del proyecto.
-        </p>
+        <h3 className="text-sm font-display font-semibold text-brand-carbon">{t('projectDetail.axisEditor.title')}</h3>
+        <p className="text-xs text-brand-gray mt-0.5">{t('projectDetail.axisEditor.subtitle')}</p>
       </div>
 
       <div className="space-y-2">
@@ -1156,7 +1171,7 @@ function AxisEditor({
               <input
                 value={row.name}
                 onChange={(e) => updateRow(row.key, { name: e.target.value })}
-                placeholder={row.id ? undefined : 'Nombre del eje nuevo…'}
+                placeholder={row.id ? undefined : t('projectDetail.axisEditor.newAxisPlaceholder')}
                 className="flex-1 min-w-[140px] text-sm px-2 py-1.5 rounded-md border border-brand-line"
               />
               <div className="flex flex-col">
@@ -1168,20 +1183,20 @@ function AxisEditor({
                 />
                 {floor > 0 && (
                   <span className={`text-[10px] ${overFloor ? 'text-brand-red' : 'text-brand-gray'}`}>
-                    mínimo {money(floor)} (ya comprometido/ejecutado)
+                    {t('projectDetail.axisEditor.minimum', { amount: money(floor) })}
                   </span>
                 )}
               </div>
               {row.id === null ? (
                 <button type="button" onClick={() => removeDraftRow(row.key)} className="text-xs text-brand-gray hover:text-brand-red">
-                  Quitar
+                  {t('common.remove')}
                 </button>
               ) : floor === 0 ? (
                 <button
                   type="button"
                   onClick={() => {
                     const original = axes.find((a) => a.id === row.id)
-                    const r = original && prompt(`¿Por qué eliminás el eje "${original.name}"?`)
+                    const r = original && prompt(t('projectDetail.axisEditor.deleteAxisPrompt', { name: original.name }))
                     if (r && original) {
                       onDelete(original, r)
                       removeDraftRow(row.key)
@@ -1189,32 +1204,32 @@ function AxisEditor({
                   }}
                   className="text-xs text-brand-gray hover:text-brand-red"
                 >
-                  Eliminar eje
+                  {t('projectDetail.axisEditor.deleteAxis')}
                 </button>
               ) : (
-                <span className="text-[10px] text-brand-gray" title="Tiene presupuesto comprometido o ejecutado">
-                  no se puede eliminar
+                <span className="text-[10px] text-brand-gray" title={t('projectDetail.axisEditor.cannotDeleteTitle')}>
+                  {t('projectDetail.axisEditor.cannotDelete')}
                 </span>
               )}
             </div>
           )
         })}
         <button onClick={addDraftRow} className="text-xs font-semibold text-brand-orange hover:underline">
-          + Agregar eje nuevo
+          {t('projectDetail.axisEditor.addAxis')}
         </button>
       </div>
 
       <div className={`text-sm rounded-md p-3 ${balanced ? 'bg-brand-cream' : 'bg-brand-red/10'}`}>
         <div className="flex justify-between">
-          <span className="text-brand-gray">Suma de ejes</span>
+          <span className="text-brand-gray">{t('projectDetail.axisEditor.sumOfAxes')}</span>
           <span className="font-semibold text-brand-carbon">{currency} {money(sum)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-brand-gray">Presupuesto total del proyecto</span>
+          <span className="text-brand-gray">{t('projectDetail.axisEditor.projectTotalBudget')}</span>
           <span className="font-semibold text-brand-carbon">{currency} {money(totalBudget)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-brand-gray">Diferencia</span>
+          <span className="text-brand-gray">{t('projectDetail.axisEditor.difference')}</span>
           <span className={`font-semibold ${balanced ? 'text-brand-green' : 'text-brand-red'}`}>
             {delta > 0 ? '+' : ''}{money(delta)}
           </span>
@@ -1225,7 +1240,7 @@ function AxisEditor({
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Motivo del cambio (queda en el historial)…"
+          placeholder={t('projectDetail.axisEditor.reasonPlaceholder')}
           className="w-full text-sm px-3 py-1.5 rounded-md border border-brand-line"
         />
         <div className="flex flex-wrap gap-2">
@@ -1234,34 +1249,38 @@ function AxisEditor({
             disabled={!balanced}
             className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-carbon text-white disabled:opacity-40"
           >
-            Guardar redistribuyendo (sin tocar el total)
+            {t('projectDetail.axisEditor.saveRedistribute')}
           </button>
           <button
             onClick={() => submit(true)}
             className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white"
           >
-            Guardar y ajustar el total a {currency} {money(sum)}
+            {t('projectDetail.axisEditor.saveAndAdjust', { currency, amount: money(sum) })}
           </button>
         </div>
       </div>
 
       <button onClick={() => setShowLog((v) => !v)} className="text-xs font-semibold text-brand-gray hover:text-brand-carbon">
-        {showLog ? 'Ocultar historial' : `Ver historial de cambios (${changeLog.length})`}
+        {showLog ? t('projectDetail.axisEditor.hideLog') : t('projectDetail.axisEditor.showLog', { count: changeLog.length })}
       </button>
 
       {showLog && (
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {changeLog.length === 0 && <p className="text-xs text-brand-gray">Todavía no hay cambios registrados.</p>}
+          {changeLog.length === 0 && <p className="text-xs text-brand-gray">{t('projectDetail.axisEditor.noLogEntries')}</p>}
           {changeLog.map((entry) => (
             <div key={entry.id} className="text-xs bg-brand-cream rounded-md p-2">
               <div className="font-semibold text-brand-carbon">
-                {entry.action === 'created' ? 'Eje creado' : entry.action === 'deleted' ? 'Eje eliminado' : 'Cambio de presupuesto'}
-                <span className="text-brand-gray font-normal"> · {new Date(entry.created_at).toLocaleString('es-AR')}</span>
+                {entry.action === 'created'
+                  ? t('projectDetail.axisEditor.logCreated')
+                  : entry.action === 'deleted'
+                    ? t('projectDetail.axisEditor.logDeleted')
+                    : t('projectDetail.axisEditor.logUpdated')}
+                <span className="text-brand-gray font-normal"> · {new Date(entry.created_at).toLocaleString(dateLocale)}</span>
               </div>
-              {entry.reason && <div className="text-brand-gray">Motivo: {entry.reason}</div>}
+              {entry.reason && <div className="text-brand-gray">{t('projectDetail.axisEditor.logReason', { reason: entry.reason })}</div>}
               {entry.action === 'updated' && entry.before && entry.after && (
                 <div className="text-brand-gray">
-                  {String((entry.before as { name?: string }).name ?? 'Presupuesto total')}:{' '}
+                  {String((entry.before as { name?: string }).name ?? t('projectDetail.axisEditor.totalBudgetFallback'))}:{' '}
                   {money(Number((entry.before as { budget_amount?: number; total_budget?: number }).budget_amount ?? (entry.before as { total_budget?: number }).total_budget ?? 0))} →{' '}
                   {money(Number((entry.after as { budget_amount?: number; total_budget?: number }).budget_amount ?? (entry.after as { total_budget?: number }).total_budget ?? 0))} {currency}
                 </div>
@@ -1343,6 +1362,7 @@ function TaskRow({
   allGroups: Group[]
   onDuplicate: (targetGroupId: string) => void
 }) {
+  const { t } = useTranslation()
   const axis = axes.find((a) => a.id === task.axis_id)
   const dependsOn = dependencies.filter((d) => d.task_id === task.id).map((d) => allTasks.find((t) => t.id === d.depends_on_task_id)).filter((t): t is Task => !!t)
   const neededBy = dependencies.filter((d) => d.depends_on_task_id === task.id).map((d) => allTasks.find((t) => t.id === d.task_id)).filter((t): t is Task => !!t)
@@ -1410,7 +1430,7 @@ function TaskRow({
     >
       <div className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-brand-cream/60">
         {draggable && (
-          <span title="Arrastrar para reordenar" className="cursor-grab text-brand-gray/50 select-none">⠿</span>
+          <span title={t('common.dragToReorder')} className="cursor-grab text-brand-gray/50 select-none">⠿</span>
         )}
         <button onClick={onToggle} className="flex-1 text-left flex items-center gap-2">
           <span className="text-[10px] font-mono text-brand-gray/70 flex-shrink-0">#{task.display_id}</span>
@@ -1446,8 +1466,8 @@ function TaskRow({
           style={{ color: STATUS_COLOR[task.status], backgroundColor: STATUS_COLOR[task.status] + '18' }}
           className="text-[11px] uppercase tracking-wider font-bold border-none rounded-full px-2 py-1 disabled:appearance-none"
         >
-          {Object.entries(STATUS_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+          {(Object.keys(STATUS_LABEL) as TaskStatus[]).map((value) => (
+            <option key={value} value={value}>{t(`common.status.${value}`)}</option>
           ))}
         </select>
         <span className="text-sm font-semibold text-brand-carbon w-28 text-right">
@@ -1455,8 +1475,8 @@ function TaskRow({
         </span>
         {canEdit && (
           <span className="flex gap-1 relative">
-            <IconButton title="Renombrar" onClick={() => setTitleEditing(true)}>✎</IconButton>
-            <IconButton title="Duplicar" onClick={() => setShowDuplicate((v) => !v)}>⧉</IconButton>
+            <IconButton title={t('common.rename')} onClick={() => setTitleEditing(true)}>✎</IconButton>
+            <IconButton title={t('projectDetail.taskRow.duplicate')} onClick={() => setShowDuplicate((v) => !v)}>⧉</IconButton>
             {showDuplicate && (
               <DuplicatePicker
                 lists={lists}
@@ -1466,7 +1486,7 @@ function TaskRow({
                 onClose={() => setShowDuplicate(false)}
               />
             )}
-            <IconButton title="Eliminar" onClick={onDelete}>×</IconButton>
+            <IconButton title={t('common.delete')} onClick={onDelete}>×</IconButton>
           </span>
         )}
       </div>
@@ -1475,18 +1495,18 @@ function TaskRow({
         <div className="px-5 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Subtareas</h4>
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.subtasks')}</h4>
               <textarea
                 value={draft.subtasksText}
                 disabled={!canEdit}
                 onChange={(e) => setDraft((d) => ({ ...d, subtasksText: e.target.value }))}
-                placeholder="Una subtarea por línea…"
+                placeholder={t('projectDetail.taskRow.subtasksPlaceholder')}
                 className="w-full text-sm rounded-md border border-brand-line p-2 min-h-[80px] disabled:bg-brand-cream/50"
               />
             </div>
             <div className="space-y-3">
               <div>
-                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Entregable</h4>
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.deliverable')}</h4>
                 <textarea
                   value={draft.deliverable}
                   disabled={!canEdit}
@@ -1495,14 +1515,14 @@ function TaskRow({
                 />
               </div>
               <div>
-                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Eje</h4>
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.axis')}</h4>
                 <select
                   value={draft.axisId}
                   disabled={!canEdit}
                   onChange={(e) => setDraft((d) => ({ ...d, axisId: e.target.value }))}
                   className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                 >
-                  <option value="">Sin eje</option>
+                  <option value="">{t('common.noAxis')}</option>
                   {axes.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
@@ -1510,7 +1530,7 @@ function TaskRow({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Proyectado</h4>
+                  <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.planned')}</h4>
                   <input
                     type="number"
                     value={draft.planned}
@@ -1520,7 +1540,7 @@ function TaskRow({
                   />
                 </div>
                 <div>
-                  <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Ejecutado (real)</h4>
+                  <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.actual')}</h4>
                   <input
                     type="number"
                     value={draft.actual}
@@ -1531,14 +1551,14 @@ function TaskRow({
                 </div>
               </div>
               <div>
-                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Proveedor / cobra</h4>
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.provider')}</h4>
                 <select
                   value={draft.providerId}
                   disabled={!canEdit}
                   onChange={(e) => setDraft((d) => ({ ...d, providerId: e.target.value }))}
                   className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                 >
-                  <option value="">Sin asignar</option>
+                  <option value="">{t('projectDetail.taskRow.noProvider')}</option>
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}{p.cuit ? ` · ${p.cuit}` : ''}</option>
                   ))}
@@ -1558,13 +1578,13 @@ function TaskRow({
                     <input
                       value={newProviderName}
                       onChange={(e) => setNewProviderName(e.target.value)}
-                      placeholder="Proveedor nuevo…"
+                      placeholder={t('projectDetail.taskRow.newProviderPlaceholder')}
                       className="flex-1 text-xs px-2 py-1 rounded-md border border-brand-line"
                     />
                     <input
                       value={newProviderCuit}
                       onChange={(e) => setNewProviderCuit(e.target.value)}
-                      placeholder="CUIT"
+                      placeholder={t('projectDetail.taskRow.cuitPlaceholder')}
                       className="w-24 text-xs px-2 py-1 rounded-md border border-brand-line"
                     />
                     <button type="submit" className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white">+</button>
@@ -1572,33 +1592,33 @@ function TaskRow({
                 )}
               </div>
               <div>
-                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Campaña / posteo vinculado</h4>
+                <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.campaignRef')}</h4>
                 <input
                   value={draft.campaignRef}
                   disabled={!canEdit}
                   onChange={(e) => setDraft((d) => ({ ...d, campaignRef: e.target.value }))}
-                  placeholder="Ej: campaña de Meta o link del posteo que potenció esto…"
+                  placeholder={t('projectDetail.taskRow.campaignRefPlaceholder')}
                   className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                 />
-                <p className="text-[10px] text-brand-gray mt-0.5">Se usa en "Marca en Acción" para mostrar qué acción del plan impulsó cada resultado.</p>
+                <p className="text-[10px] text-brand-gray mt-0.5">{t('projectDetail.taskRow.campaignRefHelp')}</p>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4 pt-3 border-t border-brand-line">
             <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">Depende de</h4>
-              <p className="text-[10px] text-brand-gray mb-1">Solo informativo — no bloquea nada, es para entender el orden entre tareas.</p>
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.dependsOn')}</h4>
+              <p className="text-[10px] text-brand-gray mb-1">{t('projectDetail.taskRow.dependsOnHelp')}</p>
               <div className="flex flex-wrap gap-1 mb-1">
-                {dependsOn.map((t) => (
-                  <span key={t.id} className="inline-flex items-center gap-1 text-xs bg-brand-cream rounded-full px-2 py-1">
-                    #{t.display_id} {t.title}
+                {dependsOn.map((dep) => (
+                  <span key={dep.id} className="inline-flex items-center gap-1 text-xs bg-brand-cream rounded-full px-2 py-1">
+                    #{dep.display_id} {dep.title}
                     {canEdit && (
-                      <button onClick={() => onRemoveDependency(t.id)} className="text-brand-gray hover:text-brand-red">×</button>
+                      <button onClick={() => onRemoveDependency(dep.id)} className="text-brand-gray hover:text-brand-red">×</button>
                     )}
                   </span>
                 ))}
-                {dependsOn.length === 0 && <span className="text-xs text-brand-gray">Ninguna.</span>}
+                {dependsOn.length === 0 && <span className="text-xs text-brand-gray">{t('common.none')}</span>}
               </div>
               {canEdit && (
                 <div className="flex items-center gap-1">
@@ -1607,11 +1627,11 @@ function TaskRow({
                     onChange={(e) => setDependencyPick(e.target.value)}
                     className="flex-1 text-xs px-2 py-1 rounded-md border border-brand-line"
                   >
-                    <option value="">Elegir tarea…</option>
+                    <option value="">{t('projectDetail.taskRow.pickTask')}</option>
                     {allTasks
-                      .filter((t) => t.id !== task.id && !dependsOn.some((d) => d.id === t.id))
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>#{t.display_id} · {t.title}</option>
+                      .filter((at) => at.id !== task.id && !dependsOn.some((d) => d.id === at.id))
+                      .map((at) => (
+                        <option key={at.id} value={at.id}>#{at.display_id} · {at.title}</option>
                       ))}
                   </select>
                   <button
@@ -1628,12 +1648,12 @@ function TaskRow({
               )}
             </div>
             <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">La necesitan</h4>
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.neededBy')}</h4>
               <div className="flex flex-wrap gap-1">
-                {neededBy.map((t) => (
-                  <span key={t.id} className="text-xs bg-brand-cream rounded-full px-2 py-1">#{t.display_id} {t.title}</span>
+                {neededBy.map((dep) => (
+                  <span key={dep.id} className="text-xs bg-brand-cream rounded-full px-2 py-1">#{dep.display_id} {dep.title}</span>
                 ))}
-                {neededBy.length === 0 && <span className="text-xs text-brand-gray">Ninguna.</span>}
+                {neededBy.length === 0 && <span className="text-xs text-brand-gray">{t('common.none')}</span>}
               </div>
             </div>
           </div>
@@ -1645,12 +1665,12 @@ function TaskRow({
                 disabled={!dirty}
                 className="text-sm font-semibold px-4 py-1.5 rounded-md bg-brand-orange text-white disabled:opacity-40"
               >
-                Guardar cambios
+                {t('common.saveChanges')}
               </button>
               {dirty ? (
-                <span className="text-xs text-brand-gray">Tenés cambios sin guardar.</span>
+                <span className="text-xs text-brand-gray">{t('common.unsavedChanges')}</span>
               ) : (
-                <span className="text-xs text-brand-green">Todo guardado.</span>
+                <span className="text-xs text-brand-green">{t('common.allSaved')}</span>
               )}
             </div>
           )}
@@ -1673,6 +1693,7 @@ function DuplicatePicker({
   onDuplicate: (targetGroupId: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const currentGroup = allGroups.find((g) => g.id === currentGroupId)
   const [listId, setListId] = useState(currentGroup?.list_id ?? lists[0]?.id ?? '')
   const groupsOfSelectedList = allGroups.filter((g) => g.list_id === listId)
@@ -1693,7 +1714,7 @@ function DuplicatePicker({
       onClick={(e) => e.stopPropagation()}
       className="absolute right-0 top-full mt-1 z-20 bg-white border border-brand-line rounded-lg shadow-lg p-3 space-y-2 w-56"
     >
-      <p className="text-xs font-semibold text-brand-carbon">Duplicar a…</p>
+      <p className="text-xs font-semibold text-brand-carbon">{t('projectDetail.duplicatePicker.title')}</p>
       <select
         value={listId}
         onChange={(e) => {
@@ -1712,13 +1733,13 @@ function DuplicatePicker({
         onChange={(e) => setGroupId(e.target.value)}
         className="w-full text-xs px-2 py-1.5 rounded-md border border-brand-line"
       >
-        {groupsOfSelectedList.length === 0 && <option value="">Sin grupos en esa lista</option>}
+        {groupsOfSelectedList.length === 0 && <option value="">{t('projectDetail.duplicatePicker.noGroupsInList')}</option>}
         {groupsOfSelectedList.map((g) => (
           <option key={g.id} value={g.id}>{g.name}</option>
         ))}
       </select>
       <div className="flex justify-end gap-2 pt-1">
-        <button onClick={onClose} className="text-xs text-brand-gray hover:text-brand-carbon">Cancelar</button>
+        <button onClick={onClose} className="text-xs text-brand-gray hover:text-brand-carbon">{t('common.cancel')}</button>
         <button
           onClick={() => {
             if (!groupId) return
@@ -1728,7 +1749,7 @@ function DuplicatePicker({
           disabled={!groupId}
           className="text-xs font-semibold px-2 py-1 rounded-md bg-brand-orange text-white disabled:opacity-40"
         >
-          Duplicar
+          {t('projectDetail.duplicatePicker.duplicate')}
         </button>
       </div>
     </div>
@@ -1756,6 +1777,7 @@ function PendingTaskRow({
   onDropOn: () => void
   onRemove: () => void
 }) {
+  const { t } = useTranslation()
   const axis = axes.find((a) => a.id === task.axis_id)
   const [dragOver, setDragOver] = useState(false)
 
@@ -1778,9 +1800,9 @@ function PendingTaskRow({
       }}
       className={`px-5 py-3 flex items-center gap-3 bg-brand-orange/5 ${isDragging ? 'opacity-40' : ''} ${dragOver ? 'border-t-2 border-brand-orange' : ''}`}
     >
-      {draggable && <span title="Arrastrar para reordenar" className="cursor-grab text-brand-gray/50 select-none">⠿</span>}
+      {draggable && <span title={t('common.dragToReorder')} className="cursor-grab text-brand-gray/50 select-none">⠿</span>}
       <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-brand-orange text-white flex-shrink-0">
-        Nueva
+        {t('projectDetail.pendingTask.badge')}
       </span>
       <span className="flex-1 text-sm font-semibold text-brand-carbon">{task.title}</span>
       {axis && (
@@ -1794,7 +1816,7 @@ function PendingTaskRow({
       <span className="text-sm font-semibold text-brand-carbon w-28 text-right">
         {currency} {money(Number(task.planned_amount))}
       </span>
-      <IconButton title="Quitar" onClick={onRemove}>×</IconButton>
+      <IconButton title={t('common.remove')} onClick={onRemove}>×</IconButton>
     </div>
   )
 }

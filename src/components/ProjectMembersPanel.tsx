@@ -1,18 +1,20 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import type { Profile, ProjectRole } from '../types/database'
 
 type MemberRow = { project_id: string; user_id: string; role: ProjectRole; profiles: Profile | null }
 type MemberStatus = { confirmed: boolean; last_sign_in_at: string | null; invited_at: string | null }
 
-const ROLE_LABEL: Record<ProjectRole, string> = { team: 'Equipo de agencia', auditor: 'Auditor / Cliente' }
-
 function daysAgo(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24)))
 }
 
 export default function ProjectMembersPanel({ projectId }: { projectId: string }) {
+  const { t, i18n } = useTranslation()
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
+  const ROLE_LABEL: Record<ProjectRole, string> = { team: t('membersPanel.roleTeam'), auditor: t('membersPanel.roleAuditor') }
   const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ProjectRole>('team')
@@ -56,18 +58,18 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
         { body: { email: email.trim(), project_id: projectId, role } },
       )
       if (error) throw error
-      if (data && !data.ok) throw new Error(data.error ?? 'No se pudo asignar el acceso.')
+      if (data && !data.ok) throw new Error(data.error ?? t('membersPanel.errorGeneric'))
       return data
     },
     onSuccess: (data) => {
       setEmail('')
       setError(null)
-      setNotice(data?.invited ? 'Invitación enviada por email.' : 'Acceso asignado — ya tenía cuenta.')
+      setNotice(data?.invited ? t('membersPanel.invited') : t('membersPanel.assigned'))
       invalidate()
     },
     onError: (err: unknown) => {
       setNotice(null)
-      setError(err instanceof Error ? err.message : 'No se pudo asignar el acceso.')
+      setError(err instanceof Error ? err.message : t('membersPanel.errorGeneric'))
     },
   })
 
@@ -82,13 +84,11 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
   return (
     <div className="bg-white border border-brand-line rounded-xl p-5 mb-4 space-y-4">
       <div>
-        <h3 className="text-sm font-display font-semibold text-brand-carbon">Miembros del proyecto</h3>
-        <p className="text-xs text-brand-gray mt-0.5">
-          Equipo de agencia: crea y ejecuta, no toca presupuesto aprobado. Auditor/Cliente: solo lectura y comentarios.
-        </p>
+        <h3 className="text-sm font-display font-semibold text-brand-carbon">{t('membersPanel.title')}</h3>
+        <p className="text-xs text-brand-gray mt-0.5">{t('membersPanel.subtitle')}</p>
       </div>
 
-      {isLoading && <p className="text-xs text-brand-gray">Cargando…</p>}
+      {isLoading && <p className="text-xs text-brand-gray">{t('membersPanel.loading')}</p>}
 
       <div className="space-y-2">
         {(members ?? []).map((m) => {
@@ -104,22 +104,25 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
                 <p className="text-[11px] text-brand-gray mt-0.5">
                   {status.confirmed
                     ? status.last_sign_in_at
-                      ? `Última conexión: ${new Date(status.last_sign_in_at).toLocaleString('es-AR')} (hace ${daysAgo(status.last_sign_in_at)}d)`
-                      : 'Cuenta activa — todavía sin registro de ingreso'
+                      ? t('membersPanel.lastSignIn', {
+                          date: new Date(status.last_sign_in_at).toLocaleString(dateLocale),
+                          days: daysAgo(status.last_sign_in_at),
+                        })
+                      : t('membersPanel.activeNoSignIn')
                     : status.invited_at
-                      ? `Invitado hace ${daysAgo(status.invited_at)}d — todavía no ingresó`
-                      : 'Todavía no ingresó'}
+                      ? t('membersPanel.invitedNotEntered', { days: daysAgo(status.invited_at) })
+                      : t('membersPanel.notEnteredYet')}
                 </p>
               )}
             </div>
             {status && (
               status.confirmed ? (
                 <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-green/15 text-brand-green">
-                  ✓ Cuenta activa
+                  {t('membersPanel.active')}
                 </span>
               ) : (
                 <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-brand-orange/15 text-brand-orange">
-                  ⏳ Invitación pendiente
+                  {t('membersPanel.pending')}
                 </span>
               )
             )}
@@ -128,17 +131,18 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
             </span>
             <button
               onClick={() => {
-                if (confirm(`¿Quitar a ${m.profiles?.email ?? 'este usuario'} del proyecto?`)) removeMember.mutate(m.user_id)
+                const who = m.profiles?.email ?? t('membersPanel.removeConfirmFallback')
+                if (confirm(t('membersPanel.removeConfirm', { who }))) removeMember.mutate(m.user_id)
               }}
               className="text-xs text-brand-gray hover:text-brand-red"
             >
-              Quitar
+              {t('membersPanel.remove')}
             </button>
           </div>
           )
         })}
         {(members ?? []).length === 0 && !isLoading && (
-          <p className="text-xs text-brand-gray">Todavía nadie más tiene acceso a este proyecto.</p>
+          <p className="text-xs text-brand-gray">{t('membersPanel.none')}</p>
         )}
       </div>
 
@@ -154,7 +158,7 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email de la persona…"
+          placeholder={t('membersPanel.emailPlaceholder')}
           className="flex-1 min-w-[200px] text-sm px-3 py-1.5 rounded-md border border-brand-line"
         />
         <select
@@ -162,15 +166,15 @@ export default function ProjectMembersPanel({ projectId }: { projectId: string }
           onChange={(e) => setRole(e.target.value as ProjectRole)}
           className="text-sm px-2 py-1.5 rounded-md border border-brand-line"
         >
-          <option value="team">Equipo de agencia</option>
-          <option value="auditor">Auditor / Cliente</option>
+          <option value="team">{t('membersPanel.roleTeam')}</option>
+          <option value="auditor">{t('membersPanel.roleAuditor')}</option>
         </select>
         <button
           type="submit"
           disabled={invite.isPending}
           className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white disabled:opacity-50"
         >
-          {invite.isPending ? 'Asignando…' : '+ Invitar / asignar'}
+          {invite.isPending ? t('membersPanel.assigning') : t('membersPanel.assign')}
         </button>
       </form>
       {notice && <p className="text-xs text-brand-green">{notice}</p>}

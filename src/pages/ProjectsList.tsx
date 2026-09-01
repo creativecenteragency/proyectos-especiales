@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
 import Dropdown, { DropdownLink } from '../components/Dropdown'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import type { Client, Project } from '../types/database'
 
 type ProjectWithClient = Project & { clients: Client | null }
@@ -19,6 +21,8 @@ const slugify = (s: string) =>
     .replace(/(^-|-$)/g, '')
 
 export default function ProjectsList() {
+  const { t, i18n } = useTranslation()
+  const numberLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -58,14 +62,15 @@ export default function ProjectsList() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <LanguageSwitcher />
             {profile?.is_master && (
-              <Dropdown trigger={<span className="text-sm text-brand-gray hover:text-brand-carbon">Ajustes ▾</span>}>
-                <DropdownLink to="/proveedores">Proveedores</DropdownLink>
-                <DropdownLink to="/conexiones">Conexiones</DropdownLink>
+              <Dropdown trigger={<span className="text-sm text-brand-gray hover:text-brand-carbon">{t('projectsList.settings')} ▾</span>}>
+                <DropdownLink to="/proveedores">{t('projectsList.providers')}</DropdownLink>
+                <DropdownLink to="/conexiones">{t('projectsList.connections')}</DropdownLink>
               </Dropdown>
             )}
             <button onClick={() => signOut()} className="text-sm text-brand-gray hover:text-brand-carbon">
-              Salir
+              {t('projectsList.logout')}
             </button>
           </div>
         </div>
@@ -73,13 +78,13 @@ export default function ProjectsList() {
 
       <main className="max-w-6xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-display font-semibold text-brand-carbon">Tus proyectos</h2>
+          <h2 className="text-2xl font-display font-semibold text-brand-carbon">{t('projectsList.title')}</h2>
           {profile?.is_master && (
             <button
               onClick={() => setShowCreate((v) => !v)}
               className="text-sm font-semibold px-3 py-1.5 rounded-md bg-brand-orange text-white"
             >
-              {showCreate ? 'Cancelar' : '+ Nuevo proyecto'}
+              {showCreate ? t('projectsList.cancel') : t('projectsList.newProject')}
             </button>
           )}
         </div>
@@ -96,10 +101,10 @@ export default function ProjectsList() {
           />
         )}
 
-        {isLoading && <p className="text-brand-gray text-sm">Cargando…</p>}
+        {isLoading && <p className="text-brand-gray text-sm">{t('projectsList.loading')}</p>}
 
         {!isLoading && (projects?.length ?? 0) === 0 && (
-          <p className="text-brand-gray text-sm">Todavía no hay proyectos cargados.</p>
+          <p className="text-brand-gray text-sm">{t('projectsList.noProjects')}</p>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -117,14 +122,16 @@ export default function ProjectsList() {
                     color: p.clients?.brand_color ?? '#f47a20',
                   }}
                 >
-                  {p.clients?.name ?? 'Sin cliente'}
+                  {p.clients?.name ?? t('projectsList.noClient')}
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-brand-gray">{p.status}</span>
+                <span className="text-[10px] uppercase tracking-wider text-brand-gray">
+                  {t(`common.projectStatus.${p.status}`)}
+                </span>
               </div>
               <h3 className="font-display font-semibold text-brand-carbon mb-1">{p.name}</h3>
               <p className="text-sm text-brand-gray line-clamp-2 mb-4">{p.description}</p>
               <div className="text-sm font-semibold text-brand-carbon">
-                {p.currency} {p.total_budget.toLocaleString('es-AR')}
+                {p.currency} {p.total_budget.toLocaleString(numberLocale)}
               </div>
             </Link>
           ))}
@@ -135,6 +142,7 @@ export default function ProjectsList() {
 }
 
 function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: (slug: string) => void }) {
+  const { t } = useTranslation()
   const [clientMode, setClientMode] = useState<'existing' | 'new'>(clients.length > 0 ? 'existing' : 'new')
   const [clientId, setClientId] = useState(clients[0]?.id ?? '')
   const [newClientName, setNewClientName] = useState('')
@@ -150,9 +158,9 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
 
   const create = useMutation({
     mutationFn: async () => {
-      if (!name.trim()) throw new Error('Poné un nombre para el proyecto.')
-      if (clientMode === 'new' && !newClientName.trim()) throw new Error('Poné un nombre para el cliente nuevo.')
-      if (clientMode === 'existing' && !clientId) throw new Error('Elegí un cliente.')
+      if (!name.trim()) throw new Error(t('projectsList.form.errors.projectName'))
+      if (clientMode === 'new' && !newClientName.trim()) throw new Error(t('projectsList.form.errors.clientName'))
+      if (clientMode === 'existing' && !clientId) throw new Error(t('projectsList.form.errors.pickClient'))
 
       let resolvedClientId = clientId
       if (clientMode === 'new') {
@@ -186,7 +194,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
       return project.slug as string
     },
     onSuccess: (createdSlug) => onCreated(createdSlug),
-    onError: (err: unknown) => setError(err instanceof Error ? err.message : 'No se pudo crear el proyecto.'),
+    onError: (err: unknown) => setError(err instanceof Error ? err.message : t('projectsList.form.errors.generic')),
   })
 
   return (
@@ -199,7 +207,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
       className="bg-white border border-brand-line rounded-xl p-5 mb-6 space-y-4"
     >
       <div>
-        <label className="block text-xs font-semibold text-brand-gray mb-1.5">Cliente</label>
+        <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.client')}</label>
         <div className="flex items-center gap-4 mb-2 text-sm">
           <label className="flex items-center gap-1.5">
             <input
@@ -208,11 +216,11 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
               onChange={() => setClientMode('existing')}
               disabled={clients.length === 0}
             />
-            Cliente existente
+            {t('projectsList.form.existingClient')}
           </label>
           <label className="flex items-center gap-1.5">
             <input type="radio" checked={clientMode === 'new'} onChange={() => setClientMode('new')} />
-            Cliente nuevo
+            {t('projectsList.form.newClient')}
           </label>
         </div>
         {clientMode === 'existing' ? (
@@ -221,7 +229,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
             onChange={(e) => setClientId(e.target.value)}
             className="w-full text-sm px-3 py-1.5 rounded-md border border-brand-line"
           >
-            {clients.length === 0 && <option value="">No hay clientes todavía</option>}
+            {clients.length === 0 && <option value="">{t('projectsList.form.noClientsYet')}</option>}
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -232,7 +240,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
           <input
             value={newClientName}
             onChange={(e) => setNewClientName(e.target.value)}
-            placeholder="Nombre del cliente…"
+            placeholder={t('projectsList.form.newClientPlaceholder')}
             className="w-full text-sm px-3 py-1.5 rounded-md border border-brand-line"
           />
         )}
@@ -240,19 +248,19 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-semibold text-brand-gray mb-1.5">Nombre del proyecto</label>
+          <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.projectName')}</label>
           <input
             value={name}
             onChange={(e) => {
               setName(e.target.value)
               if (!slugTouched) setSlug(slugify(e.target.value))
             }}
-            placeholder="Ej. Oxford Argentina 2026"
+            placeholder={t('projectsList.form.projectNamePlaceholder')}
             className="w-full text-sm px-3 py-1.5 rounded-md border border-brand-line"
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold text-brand-gray mb-1.5">Slug (URL)</label>
+          <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.slug')}</label>
           <input
             value={slug}
             onChange={(e) => {
@@ -266,7 +274,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
       </div>
 
       <div>
-        <label className="block text-xs font-semibold text-brand-gray mb-1.5">Descripción</label>
+        <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.description')}</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -277,7 +285,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div>
-          <label className="block text-xs font-semibold text-brand-gray mb-1.5">Presupuesto total</label>
+          <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.totalBudget')}</label>
           <input
             type="number"
             min="0"
@@ -288,7 +296,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold text-brand-gray mb-1.5">Moneda</label>
+          <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.currency')}</label>
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
@@ -299,7 +307,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
           </select>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-brand-gray mb-1.5">Inicio</label>
+          <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.start')}</label>
           <input
             type="date"
             value={startDate}
@@ -308,7 +316,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold text-brand-gray mb-1.5">Fin</label>
+          <label className="block text-xs font-semibold text-brand-gray mb-1.5">{t('projectsList.form.end')}</label>
           <input
             type="date"
             value={endDate}
@@ -326,7 +334,7 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
           disabled={create.isPending}
           className="text-sm font-semibold px-4 py-2 rounded-md bg-brand-orange text-white disabled:opacity-50"
         >
-          {create.isPending ? 'Creando…' : 'Crear proyecto'}
+          {create.isPending ? t('projectsList.form.creating') : t('projectsList.form.create')}
         </button>
       </div>
     </form>

@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import type { Client } from '../types/database'
 
 type Variant = 'positive' | 'negative'
 
 export default function ClientLogoEditor({ client, onSaved }: { client: Client; onSaved: () => void }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
   async function handleFile(variant: Variant, file: File) {
@@ -20,7 +22,7 @@ export default function ClientLogoEditor({ client, onSaved }: { client: Client; 
       if (updateError) throw updateError
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo subir el logo.')
+      setError(err instanceof Error ? err.message : t('clientLogoEditor.errorUpload'))
     }
   }
 
@@ -33,13 +35,10 @@ export default function ClientLogoEditor({ client, onSaved }: { client: Client; 
 
   return (
     <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
-      <p className="text-xs text-white/70 mb-3">
-        Logo de {client.name} — el positivo se usa sobre fondos claros (informes), el negativo sobre fondos oscuros (este panel). Se
-        muestran en el proyecto y en los informes PDF.
-      </p>
+      <p className="text-xs text-white/70 mb-3">{t('clientLogoEditor.help', { client: client.name })}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <LogoSlot
-          label="Logo positivo (fondo claro)"
+          label={t('clientLogoEditor.positiveLabel')}
           preview="light"
           url={client.logo_url}
           uploading={false}
@@ -47,7 +46,7 @@ export default function ClientLogoEditor({ client, onSaved }: { client: Client; 
           onRemove={() => handleRemove('positive')}
         />
         <LogoSlot
-          label="Logo negativo (fondo oscuro)"
+          label={t('clientLogoEditor.negativeLabel')}
           preview="dark"
           url={client.logo_url_negative}
           uploading={false}
@@ -74,6 +73,7 @@ function LogoSlot({
   onUpload: (file: File) => void
   onRemove: () => void
 }) {
+  const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
@@ -83,7 +83,7 @@ function LogoSlot({
         {url ? (
           <img src={url} alt={label} className="h-10 max-w-[88px] object-contain p-1" />
         ) : (
-          <span className={`text-[10px] ${preview === 'light' ? 'text-brand-gray' : 'text-white/40'}`}>Sin logo</span>
+          <span className={`text-[10px] ${preview === 'light' ? 'text-brand-gray' : 'text-white/40'}`}>{t('clientLogoEditor.noLogo')}</span>
         )}
       </div>
       <div className="flex-1">
@@ -94,10 +94,10 @@ function LogoSlot({
             disabled={busy}
             className="text-xs font-semibold px-2.5 py-1 rounded-md bg-brand-orange text-white disabled:opacity-50"
           >
-            {busy ? 'Subiendo…' : url ? 'Cambiar' : 'Subir'}
+            {busy ? t('clientLogoEditor.uploading') : url ? t('clientLogoEditor.change') : t('clientLogoEditor.upload')}
           </button>
           {url && (
-            <button onClick={onRemove} className="text-xs text-white/60 hover:text-white">Quitar</button>
+            <button onClick={onRemove} className="text-xs text-white/60 hover:text-white">{t('clientLogoEditor.remove')}</button>
           )}
         </div>
         <input

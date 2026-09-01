@@ -5,15 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "check-i18n": "node scripts/check-i18n-sync.mjs",
+    "build": "npm run check-i18n && tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-query": "^5.101.4",
+    "i18next": "^26.4.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.13",
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {

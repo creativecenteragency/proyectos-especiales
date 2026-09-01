@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from './context/AuthContext'
 import Login from './pages/Login'
 import SetPassword from './pages/SetPassword'
@@ -11,10 +12,11 @@ import Conexiones from './pages/Conexiones'
 import ProjectProposal from './pages/ProjectProposal'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation()
   const { session, loading, passwordRecovery } = useAuth()
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-brand-gray">Cargando…</div>
+    return <div className="min-h-screen flex items-center justify-center text-brand-gray">{t('common.loading')}</div>
   }
   if (!session) return <Navigate to="/login" replace />
   if (passwordRecovery) return <SetPassword />

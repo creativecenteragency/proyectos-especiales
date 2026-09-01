@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 
 export default function Login() {
+  const { t } = useTranslation()
   const { session, signIn, resetPassword } = useAuth()
   const [mode, setMode] = useState<'signin' | 'forgot'>('signin')
   const [email, setEmail] = useState('')
@@ -41,24 +44,23 @@ export default function Login() {
 
   if (mode === 'forgot') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-brand-cream px-4">
+      <div className="min-h-screen flex items-center justify-center bg-brand-cream px-4 relative">
+        <LanguageSwitcher className="absolute top-4 right-4" />
         <form
           onSubmit={handleForgotPassword}
           className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-brand-line p-8 space-y-5"
         >
           <div className="space-y-1">
             <BrandMark className="h-8 w-8 mb-2" />
-            <h1 className="text-xl font-semibold font-display text-brand-carbon">Restablecer contraseña</h1>
-            <p className="text-sm text-brand-gray">Te enviamos un link para elegir una contraseña nueva.</p>
+            <h1 className="text-xl font-semibold font-display text-brand-carbon">{t('login.resetTitle')}</h1>
+            <p className="text-sm text-brand-gray">{t('login.resetSubtitle')}</p>
           </div>
 
           {resetSent ? (
-            <p className="text-sm text-brand-green">
-              Listo. Revisá tu email ({email}) y seguí el link para elegir tu nueva contraseña.
-            </p>
+            <p className="text-sm text-brand-green">{t('login.resetSentMessage', { email })}</p>
           ) : (
             <div className="space-y-1">
-              <label className="block text-sm font-medium text-brand-carbon">Email</label>
+              <label className="block text-sm font-medium text-brand-carbon">{t('login.email')}</label>
               <input
                 type="email"
                 required
@@ -77,7 +79,7 @@ export default function Login() {
               disabled={submitting}
               className="w-full rounded-md bg-brand-orange text-white text-sm font-semibold py-2 hover:opacity-90 disabled:opacity-50"
             >
-              {submitting ? 'Enviando…' : 'Enviar link'}
+              {submitting ? t('login.sending') : t('login.sendLink')}
             </button>
           )}
 
@@ -86,7 +88,7 @@ export default function Login() {
             onClick={backToSignIn}
             className="w-full text-center text-sm text-brand-gray hover:text-brand-carbon"
           >
-            Volver a ingresar
+            {t('login.backToSignIn')}
           </button>
         </form>
       </div>
@@ -94,19 +96,20 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-cream px-4">
+    <div className="min-h-screen flex items-center justify-center bg-brand-cream px-4 relative">
+      <LanguageSwitcher className="absolute top-4 right-4" />
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-brand-line p-8 space-y-5"
       >
         <div className="space-y-1">
           <BrandMark className="h-8 w-8 mb-2" />
-          <h1 className="text-xl font-semibold font-display text-brand-carbon">Proyectos Especiales</h1>
-          <p className="text-sm text-brand-gray">Iniciá sesión para ver tus proyectos.</p>
+          <h1 className="text-xl font-semibold font-display text-brand-carbon">{t('login.title')}</h1>
+          <p className="text-sm text-brand-gray">{t('login.subtitle')}</p>
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm font-medium text-brand-carbon">Email</label>
+          <label className="block text-sm font-medium text-brand-carbon">{t('login.email')}</label>
           <input
             type="email"
             required
@@ -118,7 +121,7 @@ export default function Login() {
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-brand-carbon">Contraseña</label>
+            <label className="block text-sm font-medium text-brand-carbon">{t('login.password')}</label>
             <button
               type="button"
               onClick={() => {
@@ -127,7 +130,7 @@ export default function Login() {
               }}
               className="text-xs text-brand-orange hover:underline"
             >
-              ¿Olvidaste tu contraseña?
+              {t('login.forgotPassword')}
             </button>
           </div>
           <input
@@ -146,7 +149,7 @@ export default function Login() {
           disabled={submitting}
           className="w-full rounded-md bg-brand-orange text-white text-sm font-semibold py-2 hover:opacity-90 disabled:opacity-50"
         >
-          {submitting ? 'Ingresando…' : 'Ingresar'}
+          {submitting ? t('login.signingIn') : t('login.signIn')}
         </button>
       </form>
     </div>
