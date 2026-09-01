@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { money, projectedClose } from '../lib/taskHelpers'
+import { localized } from '../lib/translate'
 import BrandMark from '../components/BrandMark'
 import type { Axis, Client, Group, List, Project, Provider, Task } from '../types/database'
 
@@ -12,7 +13,8 @@ type Sections = { financial: boolean; axes: boolean; tasks: boolean }
 
 export default function ReportPrint() {
   const { t, i18n } = useTranslation()
-  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'es-AR'
+  const lang = i18n.resolvedLanguage ?? 'es'
+  const dateLocale = lang === 'pt-BR' ? 'pt-BR' : 'es-AR'
   const { slug } = useParams<{ slug: string }>()
   const { session } = useAuth()
   const [sections, setSections] = useState<Sections>({ financial: true, axes: true, tasks: true })
@@ -87,7 +89,7 @@ export default function ReportPrint() {
             <div className="text-xs uppercase tracking-wider text-brand-gray">
               {t('reportPrint.reportSubtitle', { client: project.clients?.name })}
             </div>
-            <h1 className="text-2xl font-display font-semibold">{project.name}</h1>
+            <h1 className="text-2xl font-display font-semibold">{localized(project.name, project.name_pt, lang)}</h1>
             <p className="text-sm text-brand-gray mt-1">
               {t('reportPrint.issuedOn', { date: new Date().toLocaleDateString(dateLocale, { day: '2-digit', month: 'long', year: 'numeric' }) })}
             </p>
@@ -139,7 +141,7 @@ export default function ReportPrint() {
                     <tr key={axis.id} className="border-b border-brand-line">
                       <td className="py-1.5 pr-2">
                         <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ backgroundColor: axis.color }} />
-                        {axis.name}
+                        {localized(axis.name, axis.name_pt, lang)}
                       </td>
                       <td className="py-1.5 pr-2 text-right">{money(Number(axis.budget_amount))}</td>
                       <td className="py-1.5 pr-2 text-right">{money(p)}</td>
@@ -155,13 +157,13 @@ export default function ReportPrint() {
 
         {sections.tasks && lists.map((list) => (
           <section key={list.id} className="mb-8 break-inside-avoid">
-            <h2 className="text-sm font-display font-semibold uppercase tracking-wider mb-2">{list.name}</h2>
+            <h2 className="text-sm font-display font-semibold uppercase tracking-wider mb-2">{localized(list.name, list.name_pt, lang)}</h2>
             {groups.filter((g) => g.list_id === list.id).map((group) => {
               const groupTasks = tasks.filter((t) => t.group_id === group.id)
               if (groupTasks.length === 0) return null
               return (
                 <div key={group.id} className="mb-4">
-                  <h3 className="text-xs font-semibold text-brand-gray uppercase tracking-wider mb-1">{group.name}</h3>
+                  <h3 className="text-xs font-semibold text-brand-gray uppercase tracking-wider mb-1">{localized(group.name, group.name_pt, lang)}</h3>
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="border-b border-brand-line text-left text-brand-gray">
@@ -177,7 +179,7 @@ export default function ReportPrint() {
                         const provider = providers.find((p) => p.id === task.provider_id)
                         return (
                           <tr key={task.id} className="border-b border-brand-line">
-                            <td className="py-1 pr-2">{task.title}</td>
+                            <td className="py-1 pr-2">{localized(task.title, task.title_pt, lang)}</td>
                             <td className="py-1 pr-2">{t(`common.status.${task.status}`)}</td>
                             <td className="py-1 pr-2">{provider?.name ?? '—'}</td>
                             <td className="py-1 pr-2 text-right">{money(Number(task.planned_amount))}</td>

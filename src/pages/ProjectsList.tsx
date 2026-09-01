@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
+import { localized, translateBatchToPt } from '../lib/translate'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
 import Dropdown, { DropdownLink } from '../components/Dropdown'
@@ -128,8 +129,8 @@ export default function ProjectsList() {
                   {t(`common.projectStatus.${p.status}`)}
                 </span>
               </div>
-              <h3 className="font-display font-semibold text-brand-carbon mb-1">{p.name}</h3>
-              <p className="text-sm text-brand-gray line-clamp-2 mb-4">{p.description}</p>
+              <h3 className="font-display font-semibold text-brand-carbon mb-1">{localized(p.name, p.name_pt, i18n.resolvedLanguage ?? 'es')}</h3>
+              <p className="text-sm text-brand-gray line-clamp-2 mb-4">{localized(p.description ?? '', p.description_pt, i18n.resolvedLanguage ?? 'es')}</p>
               <div className="text-sm font-semibold text-brand-carbon">
                 {p.currency} {p.total_budget.toLocaleString(numberLocale)}
               </div>
@@ -174,14 +175,17 @@ function NewProjectForm({ clients, onCreated }: { clients: Client[]; onCreated: 
       }
 
       const finalSlug = slug.trim() || slugify(name)
+      const [name_pt, description_pt] = await translateBatchToPt([name.trim(), description.trim()])
 
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
           client_id: resolvedClientId,
           name: name.trim(),
+          name_pt,
           slug: finalSlug,
           description: description.trim() || null,
+          description_pt,
           total_budget: totalBudget ? Number(totalBudget) : 0,
           currency,
           start_date: startDate || null,

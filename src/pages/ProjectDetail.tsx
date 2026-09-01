@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { STATUS_LABEL, STATUS_COLOR, money, projectedClose } from '../lib/taskHelpers'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
+import { localized, translateToPt } from '../lib/translate'
 import BrandMark from '../components/BrandMark'
 import ClientLogoEditor from '../components/ClientLogoEditor'
 import ProjectMembersPanel from '../components/ProjectMembersPanel'
@@ -30,7 +31,8 @@ type BoardDraft = Record<string, string[]> // group_id -> ids ordenados ("new:<u
 type PendingDuplicate = { source: Task; targetGroupId: string }
 
 export default function ProjectDetail() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const lang = i18n.resolvedLanguage ?? 'es'
   const { slug } = useParams<{ slug: string }>()
   const { profile, session } = useAuth()
   const queryClient = useQueryClient()
@@ -130,7 +132,8 @@ export default function ProjectDetail() {
     mutationFn: async (name: string) => {
       if (!data) return
       const sort_order = data.lists.length + 1
-      const { error } = await supabase.from('lists').insert({ project_id: data.project.id, name, sort_order })
+      const name_pt = await translateToPt(name)
+      const { error } = await supabase.from('lists').insert({ project_id: data.project.id, name, name_pt, sort_order })
       if (error) throw error
     },
     onSuccess: invalidate,
@@ -158,7 +161,8 @@ export default function ProjectDetail() {
   const addGroup = useMutation({
     mutationFn: async ({ listId, name }: { listId: string; name: string }) => {
       const sort_order = groupsOfList.length + 1
-      const { error } = await supabase.from('groups').insert({ list_id: listId, name, sort_order })
+      const name_pt = await translateToPt(name)
+      const { error } = await supabase.from('groups').insert({ list_id: listId, name, name_pt, sort_order })
       if (error) throw error
     },
     onSuccess: invalidate,
@@ -183,10 +187,12 @@ export default function ProjectDetail() {
   const addTask = useMutation({
     mutationFn: async (input: { groupId: string; title: string; axisId: string | null; planned: number }) => {
       const count = data?.tasks.filter((t) => t.group_id === input.groupId).length ?? 0
+      const title_pt = await translateToPt(input.title)
       const { error } = await supabase.from('tasks').insert({
         group_id: input.groupId,
         axis_id: input.axisId,
         title: input.title,
+        title_pt,
         planned_amount: input.planned,
         sort_order: count + 1,
       })
@@ -304,9 +310,10 @@ export default function ProjectDetail() {
       let sortOrder = data.axes.length + 1
       for (const row of rows) {
         if (row.id === null) {
+          const name_pt = await translateToPt(row.name)
           const { data: inserted, error } = await supabase
             .from('axes')
-            .insert({ project_id: data.project.id, name: row.name, color: row.color, budget_amount: row.budget, sort_order: sortOrder++ })
+            .insert({ project_id: data.project.id, name: row.name, name_pt, color: row.color, budget_amount: row.budget, sort_order: sortOrder++ })
             .select()
             .single()
           if (error) throw error
@@ -516,8 +523,8 @@ export default function ProjectDetail() {
           {isMaster && showLogoEditor && project.clients && (
             <ClientLogoEditor client={project.clients} onSaved={invalidate} />
           )}
-          <h1 className="text-3xl font-display font-semibold mb-2">{project.name}</h1>
-          <p className="text-sm text-white/70 max-w-2xl mb-6">{project.description}</p>
+          <h1 className="text-3xl font-display font-semibold mb-2">{localized(project.name, project.name_pt, lang)}</h1>
+          <p className="text-sm text-white/70 max-w-2xl mb-6">{localized(project.description ?? '', project.description_pt, lang)}</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-white/10 rounded-lg overflow-hidden">
             <Stat label={t('projectDetail.stats.totalBudget')} value={`${project.currency} ${money(Number(project.total_budget))}`} />
@@ -573,7 +580,7 @@ export default function ProjectDetail() {
                 <div key={axis.id} className={`bg-white border rounded-lg p-4 ${axisOver ? 'border-brand-red' : 'border-brand-line'}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: axis.color }} />
-                    <span className="text-xs font-semibold text-brand-carbon">{axis.name}</span>
+                    <span className="text-xs font-semibold text-brand-carbon">{localized(axis.name, axis.name_pt, lang)}</span>
                   </div>
                   <div className="text-sm font-display font-semibold text-brand-carbon">
                     {project.currency} {money(Number(axis.budget_amount))}
@@ -613,6 +620,7 @@ export default function ProjectDetail() {
               <ListTab
                 key={l.id}
                 list={l}
+                lang={lang}
                 active={list?.id === l.id}
                 canEdit={canEdit}
                 onSelect={() => setActiveListId(l.id)}
@@ -659,9 +667,9 @@ export default function ProjectDetail() {
                   <div key={tempId} className="text-xs bg-white border border-brand-line rounded-md px-3 py-2 flex items-center justify-between">
                     <span>
                       {t('projectDetail.board.copyOf', {
-                        title: pd.source.title,
-                        list: targetList?.name,
-                        group: targetGroup?.name,
+                        title: localized(pd.source.title, pd.source.title_pt, lang),
+                        list: targetList ? localized(targetList.name, targetList.name_pt, lang) : undefined,
+                        group: targetGroup ? localized(targetGroup.name, targetGroup.name_pt, lang) : undefined,
                       })}
                     </span>
                     <button onClick={() => removePendingDuplicate(tempId)} className="text-brand-gray hover:text-brand-red">
@@ -706,6 +714,7 @@ export default function ProjectDetail() {
                   <div key={group.id} className="bg-white border border-brand-line rounded-xl overflow-hidden">
                     <GroupHeader
                       group={group}
+                      lang={lang}
                       canEdit={canEdit}
                       summary={t('projectDetail.axes.summary', { planned: money(gPlanned), actual: money(gActual) })}
                       onRename={(name) => updateGroup.mutate({ id: group.id, name })}
@@ -735,6 +744,7 @@ export default function ProjectDetail() {
                           <TaskRow
                             key={task.id}
                             task={task}
+                            lang={lang}
                             axes={axes}
                             providers={providers ?? []}
                             allTasks={tasks}
@@ -816,6 +826,7 @@ function Stat({ label, value, alert }: { label: string; value: string; alert?: b
 
 function ListTab({
   list,
+  lang,
   active,
   canEdit,
   onSelect,
@@ -823,6 +834,7 @@ function ListTab({
   onDelete,
 }: {
   list: List
+  lang: string
   active: boolean
   canEdit: boolean
   onSelect: () => void
@@ -868,7 +880,7 @@ function ListTab({
             : 'bg-white text-brand-carbon border-brand-line hover:border-brand-carbon'
         }`}
       >
-        {list.name}
+        {localized(list.name, list.name_pt, lang)}
       </button>
       {canEdit && (
         <span className="absolute -top-2 -right-2 hidden group-hover:flex gap-0.5">
@@ -882,12 +894,14 @@ function ListTab({
 
 function GroupHeader({
   group,
+  lang,
   canEdit,
   summary,
   onRename,
   onDelete,
 }: {
   group: Group
+  lang: string
   canEdit: boolean
   summary: string
   onRename: (name: string) => void
@@ -920,7 +934,7 @@ function GroupHeader({
           />
         </form>
       ) : (
-        <h3 className="font-display font-semibold">{group.name}</h3>
+        <h3 className="font-display font-semibold">{localized(group.name, group.name_pt, lang)}</h3>
       )}
       <div className="flex items-center gap-3">
         <span className="text-xs text-white/70">{summary}</span>
@@ -1317,6 +1331,7 @@ function draftFromTask(task: Task): TaskDraft {
 
 function TaskRow({
   task,
+  lang,
   axes,
   providers,
   allTasks,
@@ -1340,6 +1355,7 @@ function TaskRow({
   onDuplicate,
 }: {
   task: Task
+  lang: string
   axes: Axis[]
   providers: Provider[]
   allTasks: Task[]
@@ -1447,7 +1463,7 @@ function TaskRow({
               className="text-sm font-semibold text-brand-carbon border border-brand-line rounded px-1"
             />
           ) : (
-            <span className="text-sm font-semibold text-brand-carbon">{task.title}</span>
+            <span className="text-sm font-semibold text-brand-carbon">{localized(task.title, task.title_pt, lang)}</span>
           )}
         </button>
         {axis && (
@@ -1480,6 +1496,7 @@ function TaskRow({
             {showDuplicate && (
               <DuplicatePicker
                 lists={lists}
+                lang={lang}
                 allGroups={allGroups}
                 currentGroupId={task.group_id}
                 onDuplicate={onDuplicate}
@@ -1612,7 +1629,7 @@ function TaskRow({
               <div className="flex flex-wrap gap-1 mb-1">
                 {dependsOn.map((dep) => (
                   <span key={dep.id} className="inline-flex items-center gap-1 text-xs bg-brand-cream rounded-full px-2 py-1">
-                    #{dep.display_id} {dep.title}
+                    #{dep.display_id} {localized(dep.title, dep.title_pt, lang)}
                     {canEdit && (
                       <button onClick={() => onRemoveDependency(dep.id)} className="text-brand-gray hover:text-brand-red">×</button>
                     )}
@@ -1631,7 +1648,7 @@ function TaskRow({
                     {allTasks
                       .filter((at) => at.id !== task.id && !dependsOn.some((d) => d.id === at.id))
                       .map((at) => (
-                        <option key={at.id} value={at.id}>#{at.display_id} · {at.title}</option>
+                        <option key={at.id} value={at.id}>#{at.display_id} · {localized(at.title, at.title_pt, lang)}</option>
                       ))}
                   </select>
                   <button
@@ -1651,7 +1668,7 @@ function TaskRow({
               <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.neededBy')}</h4>
               <div className="flex flex-wrap gap-1">
                 {neededBy.map((dep) => (
-                  <span key={dep.id} className="text-xs bg-brand-cream rounded-full px-2 py-1">#{dep.display_id} {dep.title}</span>
+                  <span key={dep.id} className="text-xs bg-brand-cream rounded-full px-2 py-1">#{dep.display_id} {localized(dep.title, dep.title_pt, lang)}</span>
                 ))}
                 {neededBy.length === 0 && <span className="text-xs text-brand-gray">{t('common.none')}</span>}
               </div>
@@ -1682,12 +1699,14 @@ function TaskRow({
 
 function DuplicatePicker({
   lists,
+  lang,
   allGroups,
   currentGroupId,
   onDuplicate,
   onClose,
 }: {
   lists: List[]
+  lang: string
   allGroups: Group[]
   currentGroupId: string
   onDuplicate: (targetGroupId: string) => void
@@ -1725,7 +1744,7 @@ function DuplicatePicker({
         className="w-full text-xs px-2 py-1.5 rounded-md border border-brand-line"
       >
         {lists.map((l) => (
-          <option key={l.id} value={l.id}>{l.name}</option>
+          <option key={l.id} value={l.id}>{localized(l.name, l.name_pt, lang)}</option>
         ))}
       </select>
       <select
@@ -1735,7 +1754,7 @@ function DuplicatePicker({
       >
         {groupsOfSelectedList.length === 0 && <option value="">{t('projectDetail.duplicatePicker.noGroupsInList')}</option>}
         {groupsOfSelectedList.map((g) => (
-          <option key={g.id} value={g.id}>{g.name}</option>
+          <option key={g.id} value={g.id}>{localized(g.name, g.name_pt, lang)}</option>
         ))}
       </select>
       <div className="flex justify-end gap-2 pt-1">

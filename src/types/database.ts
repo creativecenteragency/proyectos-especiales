@@ -35,6 +35,10 @@ export interface Project {
   proposal_summary: string | null
   proposal_objectives: string | null
   created_at: string
+  // Fase 2 del multi-idioma: traducción a PT-BR, autocompletada vía DeepL al
+  // guardar (si estaba vacía) y editable a mano después.
+  name_pt: string | null
+  description_pt: string | null
 }
 
 export interface RoadmapItem {
@@ -65,6 +69,7 @@ export interface Axis {
   budget_amount: number
   sort_order: number
   created_at: string
+  name_pt: string | null
 }
 
 export interface List {
@@ -73,6 +78,7 @@ export interface List {
   name: string
   sort_order: number
   created_at: string
+  name_pt: string | null
 }
 
 export interface Group {
@@ -81,6 +87,7 @@ export interface Group {
   name: string
   sort_order: number
   created_at: string
+  name_pt: string | null
 }
 
 export type TaskStatus = 'preparacion' | 'planificado' | 'en_curso' | 'hecho' | 'bloqueado'
@@ -100,6 +107,7 @@ export interface Task {
   provider_id: string | null
   campaign_ref: string | null
   title: string
+  title_pt: string | null
   description: string | null
   status: TaskStatus
   tags: string[]
