@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { money, projectedClose } from '../lib/taskHelpers'
+import { money, pendingAmount, projectedClose } from '../lib/taskHelpers'
 import { localized } from '../lib/translate'
 import BrandMark from '../components/BrandMark'
 import type { Axis, Client, Group, List, Project, Provider, Task, TaskCost } from '../types/database'
@@ -66,7 +66,7 @@ export default function ReportPrint() {
   if (isLoading || !data) return <div className="p-10 text-brand-gray">{t('reportPrint.loading')}</div>
 
   const { project, axes, lists, groups, tasks, providers, costs } = data
-  const plannedTotal = tasks.reduce((s, t) => s + Number(t.planned_amount), 0)
+  const pendingTotal = pendingAmount(tasks)
   const actualTotal = tasks.reduce((s, t) => s + Number(t.actual_amount), 0)
   const projectedTotal = projectedClose(tasks)
 
@@ -112,7 +112,7 @@ export default function ReportPrint() {
             <table className="w-full text-sm border-collapse">
               <tbody>
                 <Row label={t('reportPrint.financial.total')} value={`${project.currency} ${money(Number(project.total_budget))}`} />
-                <Row label={t('reportPrint.financial.planned')} value={`${project.currency} ${money(plannedTotal)}`} />
+                <Row label={t('reportPrint.financial.planned')} value={`${project.currency} ${money(pendingTotal)}`} />
                 <Row label={t('reportPrint.financial.actual')} value={`${project.currency} ${money(actualTotal)}`} />
                 <Row label={t('reportPrint.financial.balance')} value={`${project.currency} ${money(Number(project.total_budget) - actualTotal)}`} />
                 <Row
@@ -141,7 +141,7 @@ export default function ReportPrint() {
               <tbody>
                 {axes.map((axis) => {
                   const axisTasks = tasks.filter((t) => t.axis_id === axis.id)
-                  const p = axisTasks.reduce((s, t) => s + Number(t.planned_amount), 0)
+                  const p = pendingAmount(axisTasks)
                   const a = axisTasks.reduce((s, t) => s + Number(t.actual_amount), 0)
                   return (
                     <tr key={axis.id} className="border-b border-brand-line">

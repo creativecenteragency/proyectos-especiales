@@ -39,6 +39,11 @@ export function costConverted(
 
 export const money2 = (n: number) => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+// Proyectado = lo que falta pagar de lo comprometido (total estimado menos lo ya ejecutado, nunca negativo).
+export function pendingAmount(items: Task[]) {
+  return items.reduce((sum, t) => sum + Math.max(Number(t.planned_amount) - Number(t.actual_amount), 0), 0)
+}
+
 // Proyección de cierre: lo ya ejecutado + lo proyectado que todavía no se ejecutó.
 // Sirve para saber si, aunque hoy no haya sobregiro, lo va a haber cuando se pague todo lo comprometido.
 export function projectedClose(items: Task[]) {

@@ -48,7 +48,7 @@
     "printableReport": "Relatório para impressão →",
     "stats": {
       "totalBudget": "Orçamento total",
-      "planned": "Projetado",
+      "planned": "Projetado (a pagar)",
       "actual": "Executado",
       "balance": "Saldo",
       "projectedClose": "Projeção de fechamento"
@@ -58,8 +58,10 @@
       "title": "Eixos de orçamento",
       "closeEditor": "Fechar editor",
       "editAxes": "Editar eixos",
-      "summary": "Projetado {{planned}} · Executado {{actual}}",
+      "summary": "Executado {{actual}} · Projetado {{pending}}",
       "projectedClose": "Projeção de fechamento {{amount}}",
+      "available": "Disponível {{amount}}",
+      "exceeded": "Excedido em {{amount}}",
       "execution": "{{pct}}% executado",
       "none": "Ainda não há eixos definidos."
     },
@@ -119,7 +121,7 @@
       "descriptionPlaceholder": "Contexto, objetivo e escopo da tarefa…",
       "deliverable": "Entregável",
       "axis": "Eixo",
-      "planned": "Projetado",
+      "planned": "Total estimado",
       "actual": "Executado (real)",
       "provider": "Fornecedor / recebe",
       "noProvider": "Não atribuído",
@@ -389,7 +391,7 @@
     "financial": {
       "title": "Resumo financeiro",
       "total": "Orçamento total",
-      "planned": "Projetado (comprometido)",
+      "planned": "Projetado (a pagar)",
       "actual": "Executado",
       "balance": "Saldo",
       "projectedClose": "Projeção de fechamento"
@@ -398,7 +400,7 @@
     "axesTable": {
       "axis": "Eixo",
       "budget": "Orçamento",
-      "planned": "Projetado",
+      "planned": "Projetado (a pagar)",
       "actual": "Executado",
       "balance": "Saldo"
     },
@@ -406,7 +408,7 @@
       "task": "Tarefa",
       "status": "Status",
       "provider": "Fornecedor",
-      "planned": "Projetado",
+      "planned": "Total estimado",
       "actual": "Executado"
     }
   },

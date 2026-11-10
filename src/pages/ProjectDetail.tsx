@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { STATUS_LABEL, STATUS_COLOR, money, projectedClose } from '../lib/taskHelpers'
+import { STATUS_LABEL, STATUS_COLOR, money, pendingAmount, projectedClose } from '../lib/taskHelpers'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import { localized, translateToPt, translateBatchToPt } from '../lib/translate'
 import BrandMark from '../components/BrandMark'
@@ -521,7 +521,7 @@ export default function ProjectDetail() {
   if (error || !data) return <div className="min-h-screen flex items-center justify-center text-brand-red">{t('projectDetail.loadError')}</div>
 
   const { project, axes, tasks } = data
-  const plannedTotal = tasks.reduce((sum, t) => sum + Number(t.planned_amount), 0)
+  const pendingTotal = pendingAmount(tasks)
   const actualTotal = tasks.reduce((sum, t) => sum + Number(t.actual_amount), 0)
   const projectedTotal = projectedClose(tasks)
   const balance = Number(project.total_budget) - actualTotal
@@ -650,7 +650,7 @@ export default function ProjectDetail() {
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-white/10 rounded-lg overflow-hidden">
             <Stat label={t('projectDetail.stats.totalBudget')} value={`${project.currency} ${money(Number(project.total_budget))}`} />
-            <Stat label={t('projectDetail.stats.planned')} value={`${project.currency} ${money(plannedTotal)}`} />
+            <Stat label={t('projectDetail.stats.planned')} value={`${project.currency} ${money(pendingTotal)}`} />
             <Stat label={t('projectDetail.stats.actual')} value={`${project.currency} ${money(actualTotal)}`} />
             <Stat label={t('projectDetail.stats.balance')} value={`${project.currency} ${money(balance)}`} />
             <Stat
@@ -693,12 +693,16 @@ export default function ProjectDetail() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
             {axes.map((axis) => {
               const axisTasks = tasks.filter((t) => t.axis_id === axis.id)
-              const axisPlanned = axisTasks.reduce((s, t) => s + Number(t.planned_amount), 0)
               const axisActual = axisTasks.reduce((s, t) => s + Number(t.actual_amount), 0)
+              const axisPending = pendingAmount(axisTasks)
               const axisProjected = projectedClose(axisTasks)
-              const axisOver = axisProjected > Number(axis.budget_amount)
-              const execPct = axis.budget_amount > 0 ? (axisActual / Number(axis.budget_amount)) * 100 : 0
+              const axisBudget = Number(axis.budget_amount)
+              const axisOver = axisProjected > axisBudget
+              const axisAvailable = axisBudget - axisProjected
+              const execPct = axisBudget > 0 ? (axisActual / axisBudget) * 100 : 0
               const pct = Math.min(100, execPct)
+              // Lo proyectado (por pagar) se dibuja a continuación de lo ejecutado, más clarito.
+              const pendingPct = axisBudget > 0 ? Math.min(100 - pct, (axisPending / axisBudget) * 100) : 0
               return (
                 <div key={axis.id} className={`bg-white border rounded-lg p-4 ${axisOver ? 'border-brand-red' : 'border-brand-line'}`}>
                   <div className="flex items-center gap-2 mb-2">
@@ -715,14 +719,20 @@ export default function ProjectDetail() {
                       })}
                     </span>
                   </div>
-                  <div className="h-1.5 bg-brand-line rounded-full mt-2 mb-1 overflow-hidden">
+                  <div className="h-1.5 bg-brand-line rounded-full mt-2 mb-1 overflow-hidden flex">
                     <div className="h-full" style={{ width: `${pct}%`, backgroundColor: axis.color }} />
+                    <div className="h-full" style={{ width: `${pendingPct}%`, backgroundColor: axis.color, opacity: 0.35 }} />
                   </div>
                   <div className="text-[10px] text-brand-gray">
-                    {t('projectDetail.axes.summary', { planned: money(axisPlanned), actual: money(axisActual) })}
+                    {t('projectDetail.axes.summary', { actual: money(axisActual), pending: money(axisPending) })}
                   </div>
                   <div className={`text-[10px] font-semibold mt-0.5 ${axisOver ? 'text-brand-red' : 'text-brand-gray'}`}>
                     {t('projectDetail.axes.projectedClose', { amount: money(axisProjected) })} {axisOver && '⚠'}
+                  </div>
+                  <div className={`text-[10px] mt-0.5 ${axisOver ? 'text-brand-red font-semibold' : 'text-brand-gray'}`}>
+                    {axisOver
+                      ? t('projectDetail.axes.exceeded', { amount: money(-axisAvailable) })
+                      : t('projectDetail.axes.available', { amount: money(axisAvailable) })}
                   </div>
                 </div>
               )
@@ -833,7 +843,7 @@ export default function ProjectDetail() {
                     return tasks.find((t) => t.id === id) ?? null
                   })
                   .filter((t): t is Task => !!t)
-                const gPlanned = groupTasks.reduce((s, t) => s + Number(t.planned_amount), 0)
+                const gPending = pendingAmount(groupTasks)
                 const gActual = groupTasks.reduce((s, t) => s + Number(t.actual_amount), 0)
 
                 function dropOnGroup(toIndex: number) {
@@ -848,7 +858,7 @@ export default function ProjectDetail() {
                       group={group}
                       lang={lang}
                       canEdit={canEdit}
-                      summary={t('projectDetail.axes.summary', { planned: money(gPlanned), actual: money(gActual) })}
+                      summary={t('projectDetail.axes.summary', { actual: money(gActual), pending: money(gPending) })}
                       onRename={(name) => updateGroup.mutate({ id: group.id, name })}
                       onDelete={() => {
                         if (confirm(t('projectDetail.board.deleteGroupConfirm', { name: group.name }))) deleteGroup.mutate(group.id)

@@ -48,7 +48,7 @@
     "printableReport": "Informe imprimible →",
     "stats": {
       "totalBudget": "Presupuesto total",
-      "planned": "Proyectado",
+      "planned": "Proyectado (por pagar)",
       "actual": "Ejecutado",
       "balance": "Saldo",
       "projectedClose": "Proyección de cierre"
@@ -58,8 +58,10 @@
       "title": "Ejes de presupuesto",
       "closeEditor": "Cerrar editor",
       "editAxes": "Editar ejes",
-      "summary": "Proyectado {{planned}} · Ejecutado {{actual}}",
+      "summary": "Ejecutado {{actual}} · Proyectado {{pending}}",
       "projectedClose": "Proyección de cierre {{amount}}",
+      "available": "Disponible {{amount}}",
+      "exceeded": "Excedido en {{amount}}",
       "execution": "{{pct}}% ejecutado",
       "none": "Todavía no hay ejes definidos."
     },
@@ -119,7 +121,7 @@
       "descriptionPlaceholder": "Contexto, objetivo y alcance de la tarea…",
       "deliverable": "Entregable",
       "axis": "Eje",
-      "planned": "Proyectado",
+      "planned": "Total estimado",
       "actual": "Ejecutado (real)",
       "provider": "Proveedor / cobra",
       "noProvider": "Sin asignar",
@@ -389,7 +391,7 @@
     "financial": {
       "title": "Resumen financiero",
       "total": "Presupuesto total",
-      "planned": "Proyectado (comprometido)",
+      "planned": "Proyectado (por pagar)",
       "actual": "Ejecutado",
       "balance": "Saldo",
       "projectedClose": "Proyección de cierre"
@@ -398,7 +400,7 @@
     "axesTable": {
       "axis": "Eje",
       "budget": "Presupuesto",
-      "planned": "Proyectado",
+      "planned": "Proyectado (por pagar)",
       "actual": "Ejecutado",
       "balance": "Saldo"
     },
@@ -406,7 +408,7 @@
       "task": "Tarea",
       "status": "Estado",
       "provider": "Proveedor",
-      "planned": "Proyectado",
+      "planned": "Total estimado",
       "actual": "Ejecutado"
     }
   },
