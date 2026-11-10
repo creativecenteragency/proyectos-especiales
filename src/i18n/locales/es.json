@@ -115,8 +115,8 @@
       }
     },
     "taskRow": {
-      "subtasks": "Checklist",
-      "subtasksPlaceholder": "Una subtarea por línea…",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Contexto, objetivo y alcance de la tarea…",
       "deliverable": "Entregable",
       "axis": "Eje",
       "planned": "Proyectado",

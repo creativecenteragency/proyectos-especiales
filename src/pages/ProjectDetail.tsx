@@ -285,7 +285,13 @@ export default function ProjectDetail() {
       }
 
       if (Object.keys(patch).length > 0) {
-        const { error } = await supabase.from('tasks').update(patch).eq('id', id)
+        // La descripción se traduce a PT-BR cada vez que cambia (si la traducción falla queda vacía,
+        // y se muestra el original); el botón 🌐 de la tarea permite reintentarlo.
+        const finalPatch: Partial<Task> = { ...patch }
+        if ('description' in patch) {
+          finalPatch.description_pt = patch.description ? await translateToPt(patch.description) : null
+        }
+        const { error } = await supabase.from('tasks').update(finalPatch).eq('id', id)
         if (error) throw error
       }
     },
@@ -338,6 +344,7 @@ export default function ProjectDetail() {
             campaign_ref: source.campaign_ref,
             title: `${source.title}${t('projectDetail.copySuffix')}`,
             description: source.description,
+            description_pt: source.description_pt,
             status: 'preparacion',
             tags: source.tags,
             custom_fields: source.custom_fields,
@@ -482,10 +489,28 @@ export default function ProjectDetail() {
   })
 
   const retranslate = useMutation({
-    mutationFn: async ({ table, id, sourceText, column }: { table: string; id: string; sourceText: string; column: string }) => {
+    mutationFn: async ({
+      table,
+      id,
+      sourceText,
+      column,
+      extra,
+    }: {
+      table: string
+      id: string
+      sourceText: string
+      column: string
+      // Segundo campo a retraducir junto con el principal (p. ej. la descripción de una tarea).
+      extra?: { sourceText: string; column: string }
+    }) => {
       const pt = await translateToPt(sourceText)
       if (!pt) throw new Error(t('common.retranslateFailed'))
-      const { error } = await supabase.from(table).update({ [column]: pt }).eq('id', id)
+      const update: Record<string, string> = { [column]: pt }
+      if (extra?.sourceText.trim()) {
+        const extraPt = await translateToPt(extra.sourceText)
+        if (extraPt) update[extra.column] = extraPt
+      }
+      const { error } = await supabase.from(table).update(update).eq('id', id)
       if (error) throw error
     },
     onSuccess: invalidate,
@@ -882,7 +907,15 @@ export default function ProjectDetail() {
                             lists={data.lists}
                             allGroups={data.groups}
                             onDuplicate={(targetGroupId) => duplicateTaskTo(task, targetGroupId)}
-                            onRetranslate={() => retranslate.mutate({ table: 'tasks', id: task.id, sourceText: task.title, column: 'title_pt' })}
+                            onRetranslate={() =>
+                              retranslate.mutate({
+                                table: 'tasks',
+                                id: task.id,
+                                sourceText: task.title,
+                                column: 'title_pt',
+                                extra: task.description ? { sourceText: task.description, column: 'description_pt' } : undefined,
+                              })
+                            }
                           />
                         ),
                       )}
@@ -1444,7 +1477,7 @@ type TaskDraft = {
   actual: string
   providerId: string
   campaignRef: string
-  subtasksText: string
+  description: string
   deliverable: string
   costs: CostDraft[]
 }
@@ -1475,7 +1508,7 @@ function draftFromTask(task: Task, costs: TaskCost[]): TaskDraft {
     actual: String(task.actual_amount),
     providerId: task.provider_id ?? '',
     campaignRef: task.campaign_ref ?? '',
-    subtasksText: ((task.custom_fields?.subtasks as string[] | undefined) ?? []).join('\n'),
+    description: task.description ?? '',
     deliverable: (task.custom_fields?.deliverable as string | undefined) ?? '',
     costs: costs.map(costDraftFromCost),
   }
@@ -1573,7 +1606,7 @@ function TaskRow({
     draft.actual !== original.actual ||
     draft.providerId !== original.providerId ||
     draft.campaignRef !== original.campaignRef ||
-    draft.subtasksText !== original.subtasksText ||
+    draft.description !== original.description ||
     draft.deliverable !== original.deliverable ||
     costsSignature(draft.costs) !== costsSignature(original.costs)
   useUnsavedChangesGuard(dirty)
@@ -1617,10 +1650,10 @@ function TaskRow({
       campaign_ref: draft.campaignRef.trim() || null,
       custom_fields: {
         ...task.custom_fields,
-        subtasks: draft.subtasksText.split('\n').map((s) => s.trim()).filter(Boolean),
         deliverable: draft.deliverable,
       },
     }
+    if (draft.description !== original.description) patch.description = draft.description.trim() || null
     if (!hasLines) {
       patch.planned_amount = Number(draft.planned) || 0
       patch.actual_amount = Number(draft.actual) || 0
@@ -1721,15 +1754,20 @@ function TaskRow({
       {isOpen && (
         <div className="px-5 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.subtasks')}</h4>
-              <textarea
-                value={draft.subtasksText}
-                disabled={!canEdit}
-                onChange={(e) => setDraft((d) => ({ ...d, subtasksText: e.target.value }))}
-                placeholder={t('projectDetail.taskRow.subtasksPlaceholder')}
-                className="w-full text-sm rounded-md border border-brand-line p-2 min-h-[80px] disabled:bg-brand-cream/50"
-              />
+            <div className="flex flex-col">
+              <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.description')}</h4>
+              {canEdit ? (
+                <textarea
+                  value={draft.description}
+                  onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                  placeholder={t('projectDetail.taskRow.descriptionPlaceholder')}
+                  className="w-full flex-1 text-sm leading-relaxed rounded-md border border-brand-line p-3 min-h-[260px] resize-y"
+                />
+              ) : (
+                <div className="w-full flex-1 text-sm leading-relaxed whitespace-pre-line rounded-md border border-brand-line bg-brand-cream/50 p-3 min-h-[120px]">
+                  {localized(task.description ?? '', task.description_pt, lang) || <span className="text-brand-gray">—</span>}
+                </div>
+              )}
             </div>
             <div className="space-y-3">
               <div>

@@ -109,6 +109,7 @@ export interface Task {
   title: string
   title_pt: string | null
   description: string | null
+  description_pt: string | null
   status: TaskStatus
   tags: string[]
   custom_fields: Record<string, unknown>
