@@ -60,6 +60,7 @@
       "editAxes": "Editar ejes",
       "summary": "Proyectado {{planned}} · Ejecutado {{actual}}",
       "projectedClose": "Proyección de cierre {{amount}}",
+      "execution": "{{pct}}% ejecutado",
       "none": "Todavía no hay ejes definidos."
     },
     "board": {

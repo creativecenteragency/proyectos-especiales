@@ -672,15 +672,23 @@ export default function ProjectDetail() {
               const axisActual = axisTasks.reduce((s, t) => s + Number(t.actual_amount), 0)
               const axisProjected = projectedClose(axisTasks)
               const axisOver = axisProjected > Number(axis.budget_amount)
-              const pct = axis.budget_amount > 0 ? Math.min(100, (axisActual / Number(axis.budget_amount)) * 100) : 0
+              const execPct = axis.budget_amount > 0 ? (axisActual / Number(axis.budget_amount)) * 100 : 0
+              const pct = Math.min(100, execPct)
               return (
                 <div key={axis.id} className={`bg-white border rounded-lg p-4 ${axisOver ? 'border-brand-red' : 'border-brand-line'}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: axis.color }} />
                     <span className="text-xs font-semibold text-brand-carbon">{localized(axis.name, axis.name_pt, lang)}</span>
                   </div>
-                  <div className="text-sm font-display font-semibold text-brand-carbon">
-                    {project.currency} {money(Number(axis.budget_amount))}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-display font-semibold text-brand-carbon">
+                      {project.currency} {money(Number(axis.budget_amount))}
+                    </span>
+                    <span className={`text-xs font-semibold ${axisOver ? 'text-brand-red' : 'text-brand-carbon'}`}>
+                      {t('projectDetail.axes.execution', {
+                        pct: execPct.toLocaleString(lang === 'pt-BR' ? 'pt-BR' : 'es-AR', { maximumFractionDigits: 1 }),
+                      })}
+                    </span>
                   </div>
                   <div className="h-1.5 bg-brand-line rounded-full mt-2 mb-1 overflow-hidden">
                     <div className="h-full" style={{ width: `${pct}%`, backgroundColor: axis.color }} />

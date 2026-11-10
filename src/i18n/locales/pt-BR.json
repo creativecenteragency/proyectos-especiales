@@ -60,6 +60,7 @@
       "editAxes": "Editar eixos",
       "summary": "Projetado {{planned}} · Executado {{actual}}",
       "projectedClose": "Projeção de fechamento {{amount}}",
+      "execution": "{{pct}}% executado",
       "none": "Ainda não há eixos definidos."
     },
     "board": {
