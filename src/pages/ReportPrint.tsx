@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { money, projectedClose } from '../lib/taskHelpers'
 import { localized } from '../lib/translate'
 import BrandMark from '../components/BrandMark'
-import type { Axis, Client, Group, List, Project, Provider, Task } from '../types/database'
+import type { Axis, Client, Group, List, Project, Provider, Task, TaskCost } from '../types/database'
 
 type Sections = { financial: boolean; axes: boolean; tasks: boolean }
 
@@ -45,7 +45,13 @@ export default function ReportPrint() {
         ? await supabase.from('tasks').select('*').in('group_id', groupIds).order('sort_order')
         : { data: [] as Task[] }
 
+      const taskIds = (tasks ?? []).map((tk) => tk.id)
+      const { data: costs } = taskIds.length
+        ? await supabase.from('task_costs').select('*').in('task_id', taskIds).order('sort_order').order('created_at')
+        : { data: [] as TaskCost[] }
+
       return {
+        costs: (costs ?? []) as TaskCost[],
         project: project as Project & { clients: Client | null },
         axes: (axes ?? []) as Axis[],
         lists: (lists ?? []) as List[],
@@ -59,7 +65,7 @@ export default function ReportPrint() {
 
   if (isLoading || !data) return <div className="p-10 text-brand-gray">{t('reportPrint.loading')}</div>
 
-  const { project, axes, lists, groups, tasks, providers } = data
+  const { project, axes, lists, groups, tasks, providers, costs } = data
   const plannedTotal = tasks.reduce((s, t) => s + Number(t.planned_amount), 0)
   const actualTotal = tasks.reduce((s, t) => s + Number(t.actual_amount), 0)
   const projectedTotal = projectedClose(tasks)
@@ -177,14 +183,31 @@ export default function ReportPrint() {
                     <tbody>
                       {groupTasks.map((task) => {
                         const provider = providers.find((p) => p.id === task.provider_id)
+                        const lines = costs.filter((c) => c.task_id === task.id)
                         return (
-                          <tr key={task.id} className="border-b border-brand-line">
-                            <td className="py-1 pr-2">{localized(task.title, task.title_pt, lang)}</td>
-                            <td className="py-1 pr-2">{t(`common.status.${task.status}`)}</td>
-                            <td className="py-1 pr-2">{provider?.name ?? '—'}</td>
-                            <td className="py-1 pr-2 text-right">{money(Number(task.planned_amount))}</td>
-                            <td className="py-1 text-right">{money(Number(task.actual_amount))}</td>
-                          </tr>
+                          <Fragment key={task.id}>
+                            <tr className={lines.length > 0 ? '' : 'border-b border-brand-line'}>
+                              <td className="py-1 pr-2">{localized(task.title, task.title_pt, lang)}</td>
+                              <td className="py-1 pr-2">{t(`common.status.${task.status}`)}</td>
+                              <td className="py-1 pr-2">
+                                {lines.length > 0 ? t('projectDetail.costs.badge', { count: lines.length }) : (provider?.name ?? '—')}
+                              </td>
+                              <td className="py-1 pr-2 text-right">{money(Number(task.planned_amount))}</td>
+                              <td className="py-1 text-right">{money(Number(task.actual_amount))}</td>
+                            </tr>
+                            {lines.map((c, i) => (
+                              <tr
+                                key={c.id}
+                                className={`text-xs text-brand-gray ${i === lines.length - 1 ? 'border-b border-brand-line' : ''}`}
+                              >
+                                <td className="py-0.5 pr-2 pl-4">· {localized(c.concept, c.concept_pt, lang)}</td>
+                                <td className="py-0.5 pr-2">{t(`projectDetail.costs.status${c.status === 'ejecutado' ? 'Ejecutado' : 'Proyectado'}`)}</td>
+                                <td className="py-0.5 pr-2">{providers.find((p) => p.id === c.provider_id)?.name ?? '—'}</td>
+                                <td className="py-0.5 pr-2 text-right">{money(Number(c.amount_converted))}</td>
+                                <td className="py-0.5 text-right">{c.status === 'ejecutado' ? money(Number(c.amount_converted)) : '—'}</td>
+                              </tr>
+                            ))}
+                          </Fragment>
                         )
                       })}
                     </tbody>

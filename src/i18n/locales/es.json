@@ -114,7 +114,7 @@
       }
     },
     "taskRow": {
-      "subtasks": "Subtareas",
+      "subtasks": "Checklist",
       "subtasksPlaceholder": "Una subtarea por línea…",
       "deliverable": "Entregable",
       "axis": "Eje",
@@ -140,6 +140,44 @@
     },
     "pendingTask": {
       "badge": "Nueva"
+    },
+    "costs": {
+      "title": "Costos por proveedor",
+      "help": "Cada línea es un proveedor con su monto. El total de la tarea es la suma, convertida a {{currency}}.",
+      "badge_one": "{{count}} proveedor",
+      "badge_other": "{{count}} proveedores",
+      "conceptPlaceholder": "Concepto (ej: Fotografía y luces)",
+      "amount": "Monto neto",
+      "iva": "IVA",
+      "ivaNone": "Sin IVA",
+      "invoice": "Factura",
+      "invoiceTypes": {
+        "A": "Factura A",
+        "B": "Factura B",
+        "C": "Factura C",
+        "otro": "Otro"
+      },
+      "rate": "Cotización (ARS/USD)",
+      "rateShort": "cotiz. {{rate}}",
+      "status": "Estado",
+      "statusProyectado": "Proyectado",
+      "statusEjecutado": "Ejecutado",
+      "paidOn": "Fecha de pago",
+      "withIva": "+ {{rate}}% IVA",
+      "withIvaShort": "con IVA",
+      "missingRate": "Falta la cotización",
+      "add": "+ Agregar proveedor / costo",
+      "remove": "Quitar",
+      "totalPlanned": "Proyectado",
+      "totalExecuted": "Ejecutado",
+      "totalArs": "Total en ARS",
+      "totalsFromLines": "Con costos por proveedor, el proyectado y el ejecutado de la tarea se calculan solos.",
+      "providersFromLines": "Los proveedores se toman de cada línea de costo.",
+      "errors": {
+        "concept": "Cada línea de costo necesita un concepto.",
+        "amount": "Cada línea de costo necesita un monto válido.",
+        "rate": "Falta la cotización en una línea que está en otra moneda que el proyecto."
+      }
     }
   },
   "projectsList": {

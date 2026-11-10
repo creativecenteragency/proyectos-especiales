@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import BrandMark from '../components/BrandMark'
-import type { Project, Provider, ProviderProject, Task } from '../types/database'
+import type { Project, Provider, ProviderProject, Task, TaskCost } from '../types/database'
 
 const money = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
@@ -33,6 +33,18 @@ export default function ProvidersPage() {
       const { data, error } = await supabase.from('tasks').select('id, provider_id, actual_amount')
       if (error) throw error
       return (data ?? []) as Pick<Task, 'id' | 'provider_id' | 'actual_amount'>[]
+    },
+    enabled: !!profile?.is_master,
+  })
+
+  // Líneas de costo (subtareas con proveedor y monto). Una tarea con líneas se atribuye a los
+  // proveedores de sus líneas ejecutadas, y deja de contar por tasks.provider_id (si no, se duplicaría).
+  const { data: costLines } = useQuery({
+    queryKey: ['all-task-costs-for-providers'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('task_costs').select('task_id, provider_id, status, amount_converted')
+      if (error) throw error
+      return (data ?? []) as Pick<TaskCost, 'task_id' | 'provider_id' | 'status' | 'amount_converted'>[]
     },
     enabled: !!profile?.is_master,
   })
@@ -91,6 +103,13 @@ export default function ProvidersPage() {
 
   if (!profile?.is_master) return <Navigate to="/" replace />
 
+  const tasksWithLines = new Set((costLines ?? []).map((c) => c.task_id))
+  const executedLines = (costLines ?? []).filter((c) => c.status === 'ejecutado')
+  const investedBy = (providerId: string) =>
+    (tasks ?? [])
+      .filter((t) => t.provider_id === providerId && !tasksWithLines.has(t.id))
+      .reduce((s, t) => s + Number(t.actual_amount), 0) +
+    executedLines.filter((c) => c.provider_id === providerId).reduce((s, c) => s + Number(c.amount_converted), 0)
   const totalInvested = (tasks ?? []).reduce((s, t) => s + Number(t.actual_amount), 0)
 
   return (
@@ -125,7 +144,7 @@ export default function ProvidersPage() {
             <tbody className="divide-y divide-brand-line">
               {(providers ?? [])
                 .map((p) => {
-                  const invested = (tasks ?? []).filter((t) => t.provider_id === p.id).reduce((s, t) => s + Number(t.actual_amount), 0)
+                  const invested = investedBy(p.id)
                   const pct = totalInvested > 0 ? (invested / totalInvested) * 100 : 0
                   return { p, invested, pct }
                 })

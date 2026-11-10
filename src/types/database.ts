@@ -121,6 +121,29 @@ export interface Task {
   updated_at: string
 }
 
+export type CostStatus = 'proyectado' | 'ejecutado'
+export type InvoiceType = 'A' | 'B' | 'C' | 'otro'
+
+// Línea de costo ("subtarea con proveedor y monto") de una tarea.
+// amount es neto en `currency`; amount_converted ya incluye IVA y está en la moneda del proyecto.
+export interface TaskCost {
+  id: string
+  task_id: string
+  concept: string
+  concept_pt: string | null
+  provider_id: string | null
+  currency: 'ARS' | 'USD'
+  amount: number
+  iva_rate: number
+  invoice_type: InvoiceType | null
+  exchange_rate: number | null
+  status: CostStatus
+  paid_on: string | null
+  amount_converted: number
+  sort_order: number
+  created_at: string
+}
+
 export interface Provider {
   id: string
   name: string
@@ -200,6 +223,7 @@ export interface Database {
       tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task> }
       comments: { Row: Comment; Insert: Partial<Comment>; Update: Partial<Comment> }
       providers: { Row: Provider; Insert: Partial<Provider>; Update: Partial<Provider> }
+      task_costs: { Row: TaskCost; Insert: Partial<TaskCost>; Update: Partial<TaskCost> }
       provider_projects: { Row: ProviderProject; Insert: Partial<ProviderProject>; Update: Partial<ProviderProject> }
       axis_change_log: { Row: AxisChangeLog; Insert: Partial<AxisChangeLog>; Update: Partial<AxisChangeLog> }
     }

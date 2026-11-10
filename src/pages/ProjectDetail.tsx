@@ -6,13 +6,28 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { STATUS_LABEL, STATUS_COLOR, money, projectedClose } from '../lib/taskHelpers'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
-import { localized, translateToPt } from '../lib/translate'
+import { localized, translateToPt, translateBatchToPt } from '../lib/translate'
 import BrandMark from '../components/BrandMark'
 import ClientLogoEditor from '../components/ClientLogoEditor'
 import ProjectMembersPanel from '../components/ProjectMembersPanel'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import CostLinesEditor, { type CostDraft } from '../components/CostLinesEditor'
 import Dropdown, { DropdownItem, DropdownLink } from '../components/Dropdown'
-import type { Axis, AxisChangeLog, Client, Group, List, Project, Provider, Task, TaskDependency, TaskStatus } from '../types/database'
+import type {
+  Axis,
+  AxisChangeLog,
+  Client,
+  CostStatus,
+  Group,
+  InvoiceType,
+  List,
+  Project,
+  Provider,
+  Task,
+  TaskCost,
+  TaskDependency,
+  TaskStatus,
+} from '../types/database'
 
 type ProjectDetailData = {
   project: Project & { clients: Client | null }
@@ -21,6 +36,7 @@ type ProjectDetailData = {
   groups: Group[]
   tasks: Task[]
   dependencies: TaskDependency[]
+  costs: TaskCost[]
   role: 'team' | 'auditor' | null
   changeLog: AxisChangeLog[]
 }
@@ -29,6 +45,23 @@ type ProjectDetailData = {
 // escribe en la base — solo se aplica al confirmar con "Guardar cambios".
 type BoardDraft = Record<string, string[]> // group_id -> ids ordenados ("new:<uuid>" = duplicado sin guardar)
 type PendingDuplicate = { source: Task; targetGroupId: string }
+
+// Cambios sobre las líneas de costo de una tarea, calculados al apretar "Guardar cambios".
+type CostUpsert = {
+  id: string | null // null = línea nueva
+  concept: string
+  conceptChanged: boolean // nueva o con el texto editado -> se (re)traduce
+  provider_id: string | null
+  currency: 'ARS' | 'USD'
+  amount: number
+  iva_rate: number
+  invoice_type: InvoiceType | null
+  exchange_rate: number | null
+  status: CostStatus
+  paid_on: string | null
+  sort_order: number
+}
+type CostOps = { upserts: CostUpsert[]; deleteIds: string[] }
 
 export default function ProjectDetail() {
   const { t, i18n } = useTranslation()
@@ -89,6 +122,11 @@ export default function ProjectDetail() {
         ? await supabase.from('task_dependencies').select('*').in('task_id', taskIds)
         : { data: [] as TaskDependency[] }
 
+      // Si la tabla todavía no existe (migración 0012 sin aplicar) simplemente no hay líneas.
+      const { data: costs } = taskIds.length
+        ? await supabase.from('task_costs').select('*').in('task_id', taskIds).order('sort_order').order('created_at')
+        : { data: [] as TaskCost[] }
+
       return {
         project: project as Project & { clients: Client | null },
         axes: axes ?? [],
@@ -96,6 +134,7 @@ export default function ProjectDetail() {
         groups: groups ?? [],
         tasks: (tasks ?? []) as Task[],
         dependencies: (dependencies ?? []) as TaskDependency[],
+        costs: (costs ?? []) as TaskCost[],
         role: (roleRow?.role as 'team' | 'auditor' | undefined) ?? null,
         changeLog: (changeLog ?? []) as AxisChangeLog[],
       }
@@ -206,6 +245,49 @@ export default function ProjectDetail() {
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<Task> }) => {
       const { error } = await supabase.from('tasks').update(patch).eq('id', id)
       if (error) throw error
+    },
+    onSuccess: invalidate,
+    onError: (err: unknown) => alert(t('projectDetail.taskUpdateError', { error: err instanceof Error ? err.message : String(err) })),
+  })
+
+  // Guarda de una sola vez los campos de la tarea y sus líneas de costo. Las líneas van primero:
+  // el trigger de la base recalcula planned/actual de la tarea a partir de ellas.
+  const saveTaskDraft = useMutation({
+    mutationFn: async ({ id, patch, ops }: { id: string; patch: Partial<Task>; ops: CostOps }) => {
+      if (ops.deleteIds.length > 0) {
+        const { error } = await supabase.from('task_costs').delete().in('id', ops.deleteIds)
+        if (error) throw error
+      }
+
+      const toTranslate = ops.upserts.filter((u) => u.conceptChanged)
+      const translations = toTranslate.length ? await translateBatchToPt(toTranslate.map((u) => u.concept)) : []
+      const ptByUpsert = new Map(toTranslate.map((u, i) => [u, translations[i] ?? null]))
+
+      for (const u of ops.upserts) {
+        const row: Record<string, unknown> = {
+          task_id: id,
+          concept: u.concept,
+          provider_id: u.provider_id,
+          currency: u.currency,
+          amount: u.amount,
+          iva_rate: u.iva_rate,
+          invoice_type: u.invoice_type,
+          exchange_rate: u.exchange_rate,
+          status: u.status,
+          paid_on: u.paid_on,
+          sort_order: u.sort_order,
+        }
+        if (u.conceptChanged) row.concept_pt = ptByUpsert.get(u) ?? null
+        const { error } = u.id
+          ? await supabase.from('task_costs').update(row).eq('id', u.id)
+          : await supabase.from('task_costs').insert(row)
+        if (error) throw error
+      }
+
+      if (Object.keys(patch).length > 0) {
+        const { error } = await supabase.from('tasks').update(patch).eq('id', id)
+        if (error) throw error
+      }
     },
     onSuccess: invalidate,
     onError: (err: unknown) => alert(t('projectDetail.taskUpdateError', { error: err instanceof Error ? err.message : String(err) })),
@@ -420,6 +502,10 @@ export default function ProjectDetail() {
   const balance = Number(project.total_budget) - actualTotal
   const overBudget = projectedTotal > Number(project.total_budget)
   const brandColor = project.clients?.brand_color ?? '#f47a20'
+  // Último tipo de cambio cargado en el proyecto: se sugiere al agregar una línea nueva (se puede cambiar).
+  const rateHint = [...data.costs]
+    .filter((c) => c.exchange_rate)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.exchange_rate
 
   function cloneBoardDraft(draft: BoardDraft): BoardDraft {
     return Object.fromEntries(Object.entries(draft).map(([k, v]) => [k, [...v]]))
@@ -782,6 +868,9 @@ export default function ProjectDetail() {
                               if (!draggedTaskId || draggedTaskId === task.id) return
                               dropOnGroup(groupTaskIds.indexOf(task.id))
                             }}
+                            costs={data.costs.filter((c) => c.task_id === task.id)}
+                            rateHint={rateHint ? String(rateHint) : ''}
+                            onSaveDraft={(patch, ops) => saveTaskDraft.mutate({ id: task.id, patch, ops })}
                             lists={data.lists}
                             allGroups={data.groups}
                             onDuplicate={(targetGroupId) => duplicateTaskTo(task, targetGroupId)}
@@ -1349,9 +1438,29 @@ type TaskDraft = {
   campaignRef: string
   subtasksText: string
   deliverable: string
+  costs: CostDraft[]
 }
 
-function draftFromTask(task: Task): TaskDraft {
+function costDraftFromCost(c: TaskCost): CostDraft {
+  return {
+    key: c.id,
+    id: c.id,
+    concept: c.concept,
+    providerId: c.provider_id ?? '',
+    currency: c.currency,
+    amount: String(Number(c.amount)),
+    ivaRate: String(Number(c.iva_rate)),
+    invoiceType: c.invoice_type ?? '',
+    exchangeRate: c.exchange_rate ? String(Number(c.exchange_rate)) : '',
+    status: c.status,
+    paidOn: c.paid_on ?? '',
+  }
+}
+
+// Firma para detectar cambios (ignora la clave de React).
+const costsSignature = (costs: CostDraft[]) => JSON.stringify(costs.map(({ key: _key, ...rest }) => rest))
+
+function draftFromTask(task: Task, costs: TaskCost[]): TaskDraft {
   return {
     axisId: task.axis_id ?? '',
     planned: String(task.planned_amount),
@@ -1360,6 +1469,7 @@ function draftFromTask(task: Task): TaskDraft {
     campaignRef: task.campaign_ref ?? '',
     subtasksText: ((task.custom_fields?.subtasks as string[] | undefined) ?? []).join('\n'),
     deliverable: (task.custom_fields?.deliverable as string | undefined) ?? '',
+    costs: costs.map(costDraftFromCost),
   }
 }
 
@@ -1384,6 +1494,9 @@ function TaskRow({
   onDragStart,
   onDragEnd,
   onDropOn,
+  costs,
+  rateHint,
+  onSaveDraft,
   lists,
   allGroups,
   onDuplicate,
@@ -1391,6 +1504,9 @@ function TaskRow({
 }: {
   task: Task
   lang: string
+  costs: TaskCost[]
+  rateHint: string
+  onSaveDraft: (patch: Partial<Task>, ops: CostOps) => void
   axes: Axis[]
   providers: Provider[]
   allTasks: Task[]
@@ -1423,7 +1539,7 @@ function TaskRow({
   const [title, setTitle] = useState(task.title)
   const [newProviderName, setNewProviderName] = useState('')
   const [newProviderCuit, setNewProviderCuit] = useState('')
-  const [draft, setDraft] = useState<TaskDraft>(() => draftFromTask(task))
+  const [draft, setDraft] = useState<TaskDraft>(() => draftFromTask(task, costs))
   const [dragOver, setDragOver] = useState(false)
   const [showDuplicate, setShowDuplicate] = useState(false)
 
@@ -1432,10 +1548,17 @@ function TaskRow({
   const [syncedAt, setSyncedAt] = useState(task.updated_at)
   if (task.updated_at !== syncedAt) {
     setSyncedAt(task.updated_at)
-    setDraft(draftFromTask(task))
+    setDraft(draftFromTask(task, costs))
+  }
+  // Idem para las líneas de costo (pueden cambiar sin que cambie la tarea, p. ej. al borrar la última).
+  const serverCostsSig = costsSignature(costs.map(costDraftFromCost))
+  const [syncedCostsSig, setSyncedCostsSig] = useState(serverCostsSig)
+  if (serverCostsSig !== syncedCostsSig) {
+    setSyncedCostsSig(serverCostsSig)
+    setDraft((d) => ({ ...d, costs: costs.map(costDraftFromCost) }))
   }
 
-  const original = draftFromTask(task)
+  const original = draftFromTask(task, costs)
   const dirty =
     draft.axisId !== original.axisId ||
     draft.planned !== original.planned ||
@@ -1443,22 +1566,59 @@ function TaskRow({
     draft.providerId !== original.providerId ||
     draft.campaignRef !== original.campaignRef ||
     draft.subtasksText !== original.subtasksText ||
-    draft.deliverable !== original.deliverable
+    draft.deliverable !== original.deliverable ||
+    costsSignature(draft.costs) !== costsSignature(original.costs)
   useUnsavedChangesGuard(dirty)
 
+  // Con líneas de costo, proveedor y montos de la tarea salen de las líneas (los calcula la base).
+  const hasLines = draft.costs.length > 0
+
   function saveDraft() {
-    onUpdate({
+    for (const c of draft.costs) {
+      if (!c.concept.trim()) return alert(t('projectDetail.costs.errors.concept'))
+      if (c.amount.trim() === '' || !(Number(c.amount) >= 0)) return alert(t('projectDetail.costs.errors.amount'))
+      if (c.currency !== currency && !(Number(c.exchangeRate) > 0)) return alert(t('projectDetail.costs.errors.rate'))
+    }
+
+    const serverById = new Map(costs.map((c) => [c.id, c]))
+    const upserts: CostUpsert[] = []
+    draft.costs.forEach((c, index) => {
+      const server = c.id ? serverById.get(c.id) : undefined
+      const unchanged =
+        server && server.sort_order === index && costsSignature([costDraftFromCost(server)]) === costsSignature([c])
+      if (unchanged) return
+      upserts.push({
+        id: c.id,
+        concept: c.concept.trim(),
+        conceptChanged: !server || server.concept !== c.concept.trim(),
+        provider_id: c.providerId || null,
+        currency: c.currency,
+        amount: Number(c.amount),
+        iva_rate: Number(c.ivaRate) || 0,
+        invoice_type: (c.invoiceType || null) as InvoiceType | null,
+        exchange_rate: c.currency !== currency ? Number(c.exchangeRate) : null,
+        status: c.status,
+        paid_on: c.paidOn || null,
+        sort_order: index,
+      })
+    })
+    const deleteIds = costs.filter((c) => !draft.costs.some((d) => d.id === c.id)).map((c) => c.id)
+
+    const patch: Partial<Task> = {
       axis_id: draft.axisId || null,
-      planned_amount: Number(draft.planned) || 0,
-      actual_amount: Number(draft.actual) || 0,
-      provider_id: draft.providerId || null,
       campaign_ref: draft.campaignRef.trim() || null,
       custom_fields: {
         ...task.custom_fields,
         subtasks: draft.subtasksText.split('\n').map((s) => s.trim()).filter(Boolean),
         deliverable: draft.deliverable,
       },
-    })
+    }
+    if (!hasLines) {
+      patch.planned_amount = Number(draft.planned) || 0
+      patch.actual_amount = Number(draft.actual) || 0
+      patch.provider_id = draft.providerId || null
+    }
+    onSaveDraft(patch, { upserts, deleteIds })
   }
 
   return (
@@ -1500,6 +1660,11 @@ function TaskRow({
             />
           ) : (
             <span className="text-sm font-semibold text-brand-carbon">{localized(task.title, task.title_pt, lang)}</span>
+          )}
+          {costs.length > 0 && (
+            <span className="text-[10px] text-brand-gray flex-shrink-0 bg-brand-cream rounded-full px-2 py-0.5">
+              {t('projectDetail.costs.badge', { count: costs.length })}
+            </span>
           )}
         </button>
         {axis && (
@@ -1588,7 +1753,7 @@ function TaskRow({
                   <input
                     type="number"
                     value={draft.planned}
-                    disabled={!canEdit}
+                    disabled={!canEdit || hasLines}
                     onChange={(e) => setDraft((d) => ({ ...d, planned: e.target.value }))}
                     className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                   />
@@ -1598,17 +1763,18 @@ function TaskRow({
                   <input
                     type="number"
                     value={draft.actual}
-                    disabled={!canEdit}
+                    disabled={!canEdit || hasLines}
                     onChange={(e) => setDraft((d) => ({ ...d, actual: e.target.value }))}
                     className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                   />
                 </div>
               </div>
+              {hasLines && <p className="text-[10px] text-brand-gray -mt-1">{t('projectDetail.costs.totalsFromLines')}</p>}
               <div>
                 <h4 className="text-[10px] uppercase tracking-wider text-brand-gray font-semibold mb-1">{t('projectDetail.taskRow.provider')}</h4>
                 <select
                   value={draft.providerId}
-                  disabled={!canEdit}
+                  disabled={!canEdit || hasLines}
                   onChange={(e) => setDraft((d) => ({ ...d, providerId: e.target.value }))}
                   className="w-full text-sm px-2 py-1.5 rounded-md border border-brand-line disabled:bg-brand-cream/50"
                 >
@@ -1617,7 +1783,8 @@ function TaskRow({
                     <option key={p.id} value={p.id}>{p.name}{p.cuit ? ` · ${p.cuit}` : ''}</option>
                   ))}
                 </select>
-                {canEdit && (
+                {hasLines && <p className="text-[10px] text-brand-gray mt-0.5">{t('projectDetail.costs.providersFromLines')}</p>}
+                {canEdit && !hasLines && (
                   <form
                     onSubmit={async (e) => {
                       e.preventDefault()
@@ -1658,6 +1825,18 @@ function TaskRow({
               </div>
             </div>
           </div>
+
+          <CostLinesEditor
+            costs={draft.costs}
+            onChange={(next) => setDraft((d) => ({ ...d, costs: next }))}
+            providers={providers}
+            projectCurrency={currency}
+            rateHint={rateHint}
+            canEdit={canEdit}
+            lang={lang}
+            serverCosts={costs}
+            onAddProvider={onAddProvider}
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4 pt-3 border-t border-brand-line">
             <div>
