@@ -1,0 +1,29 @@
+name: Keep Supabase awake
+
+# El plan gratuito de Supabase pausa el proyecto tras 7 días sin actividad.
+# Este flujo hace una consulta real a la base cada 3 días para evitarlo.
+# Si la consulta falla (por ejemplo, porque el proyecto ya está pausado),
+# el flujo se marca en rojo y GitHub avisa por mail.
+
+on:
+  schedule:
+    - cron: '17 12 */3 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the database
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 10 --max-time 30 \
+            "$SUPABASE_URL/rest/v1/clients?select=id&limit=1" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY"
+          echo
+          echo "Supabase respondió OK"
