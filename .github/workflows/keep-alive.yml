@@ -1,13 +1,16 @@
 name: Keep Supabase awake
 
 # El plan gratuito de Supabase pausa el proyecto tras 7 días sin actividad.
-# Este flujo hace una consulta real a la base cada 3 días para evitarlo.
-# Si la consulta falla (por ejemplo, porque el proyecto ya está pausado),
-# el flujo se marca en rojo y GitHub avisa por mail.
+# Una consulta de lectura sola no alcanzó, así que cada día se hace una actividad completa:
+#   1. escritura real en la base (función keepalive_ping, migración 0014)
+#   2. lectura de una tabla por la API
+#   3. chequeo del servicio de autenticación
+# Si algo falla (por ejemplo, porque el proyecto ya está pausado), el flujo se marca
+# en rojo y GitHub avisa por mail.
 
 on:
   schedule:
-    - cron: '17 12 */3 * *'
+    - cron: '17 12 * * *'
   workflow_dispatch:
 
 permissions: {}
@@ -16,14 +19,26 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Query the database
+      - name: Database write, API read and auth check
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          curl --fail --silent --show-error --retry 3 --retry-delay 10 --max-time 30 \
-            "$SUPABASE_URL/rest/v1/clients?select=id&limit=1" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_KEY"
+          CURL="curl --fail --silent --show-error --retry 3 --retry-delay 10 --max-time 30"
+
+          echo "1/3 escritura (keepalive_ping)"
+          $CURL -X POST "$SUPABASE_URL/rest/v1/rpc/keepalive_ping" \
+            -H "apikey: $SUPABASE_KEY" -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "Content-Type: application/json" -d '{}'
           echo
+
+          echo "2/3 lectura (clients)"
+          $CURL "$SUPABASE_URL/rest/v1/clients?select=id&limit=1" \
+            -H "apikey: $SUPABASE_KEY" -H "Authorization: Bearer $SUPABASE_KEY"
+          echo
+
+          echo "3/3 auth"
+          $CURL "$SUPABASE_URL/auth/v1/health" -H "apikey: $SUPABASE_KEY"
+          echo
+
           echo "Supabase respondió OK"
